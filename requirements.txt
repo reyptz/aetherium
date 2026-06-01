@@ -1,0 +1,67 @@
+# ── Cryptographie standard ─────────────────────────────────────────────────────
+cryptography>=41.0.0
+pycryptodome>=3.19.0
+
+# ── KEM Post-Quantique ─────────────────────────────────────────────────────────
+kyber-py>=0.7.0            # ML-KEM / Kyber512 (FIPS 203) — utilisé dans aetherium.py
+pqcrypto>=0.1.3            # Backend pqcrypto optionnel — utilisé dans kem_kyber.py
+
+# ── BIP39 mnémoniques crypto ───────────────────────────────────────────────────
+mnemonic>=0.20
+
+# ── TOTP/OTP ──────────────────────────────────────────────────────────────────
+pyotp>=2.9.0
+
+# ── KDF Argon2 ────────────────────────────────────────────────────────────────
+argon2-cffi>=21.3.0
+
+# ── Utilitaires scientifiques ─────────────────────────────────────────────────
+numpy>=1.24.0
+scipy>=1.10.0
+
+# ── Embeddings (pqc/embedding_security.py) ────────────────────────────────────
+sentence-transformers>=2.3.0
+
+# ── Framework web (API) ───────────────────────────────────────────────────────
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+jinja2>=3.1.0
+python-multipart>=0.0.6
+
+# ── Validation et données ─────────────────────────────────────────────────────
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+email-validator>=2.0.0
+
+# ── Sécurité et authentification ──────────────────────────────────────────────
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# ── Fragmentation et dispersion (optionnel) ───────────────────────────────────
+reedsolo>=1.6.0
+# ipfshttpclient>=0.8.0  # Désactivé : nécessite un nœud IPFS local
+
+# ── Logging et monitoring ─────────────────────────────────────────────────────
+structlog>=23.0.0
+psutil>=5.9.0
+memory-profiler>=0.60.0
+
+# ── Tests et développement ────────────────────────────────────────────────────
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+pytest-benchmark>=4.0.0
+httpx>=0.25.0
+
+# ── Qualité du code ───────────────────────────────────────────────────────────
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
+
+# ── Sécurité scanning ─────────────────────────────────────────────────────────
+bandit>=1.7.0
+safety>=2.3.0
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+mkdocs>=1.5.0
+mkdocs-material>=9.4.0
