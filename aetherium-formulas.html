@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aetherium — Spécification Mathématique Formelle</title>
+<script>
+MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    packages: {'[+]': ['boldsymbol']},
+    tags: 'none'
+  },
+  options: { skipHtmlTags: ['script','noscript','style','textarea','pre'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-chtml.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&family=Cormorant+Garamond:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:      #0d0d10;
+    --muted:    #3a3a4a;
+    --faint:    #6b6b80;
+    --rule:     #c8c8d8;
+    --accent:   #1a1a2e;
+    --gold:     #b8941f;
+    --gold-light: #d4a84b;
+    --bg:       #f5f3eb;
+    --paper:    #faf8f3;
+    --code-bg:  #ebe8df;
+    --warn:     #8b4513;
+    --warn-bg:  #fdf5e8;
+    --shadow:   rgba(13, 13, 16, 0.1);
+    --shadow-lg: rgba(13, 13, 16, 0.2);
+    --nav-bg:   rgba(250, 248, 243, 0.98);
+    --gradient-1: linear-gradient(135deg, #f5f3eb 0%, #ebe8df 100%);
+  }
+
+  [data-theme="dark"] {
+    --ink:      #e8e4d8;
+    --muted:    #a8a498;
+    --faint:    #6b6b70;
+    --rule:     #3a3a4a;
+    --accent:   #e8e4d8;
+    --gold:     #d4a84b;
+    --gold-light: #e5c05a;
+    --bg:       #0a0a0f;
+    --paper:    #12121f;
+    --code-bg:  #1e1e30;
+    --warn:     #e8a060;
+    --warn-bg:  #2a1a0a;
+    --shadow:   rgba(0, 0, 0, 0.4);
+    --shadow-lg: rgba(0, 0, 0, 0.6);
+    --nav-bg:   rgba(18, 18, 31, 0.98);
+    --gradient-1: linear-gradient(135deg, #0a0a0f 0%, #12121f 100%);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.75;
+    color: var(--ink);
+    background: var(--gradient-1);
+    padding: 0;
+    scroll-behavior: smooth;
+    transition: background 0.4s ease, color 0.4s ease;
+  }
+
+  /* ─── NAVIGATION ─── */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--nav-bg);
+    backdrop-filter: blur(16px) saturate(180%);
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 20px var(--shadow);
+  }
+  .nav-links {
+    display: flex;
+    gap: 24px;
+    list-style: none;
+  }
+  .nav-links a {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+  .nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: var(--gold);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateX(-50%);
+  }
+  .nav-links a:hover {
+    color: var(--gold);
+    background: rgba(184, 148, 31, 0.12);
+  }
+  .nav-links a:hover::after {
+    width: 60%;
+  }
+  .nav-links a.active {
+    color: var(--gold);
+    background: rgba(184, 148, 31, 0.18);
+  }
+  .nav-links a.active::after {
+    width: 80%;
+  }
+  .theme-toggle {
+    background: linear-gradient(135deg, var(--paper) 0%, var(--code-bg) 100%);
+    border: 1px solid var(--rule);
+    border-radius: 24px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px var(--shadow);
+  }
+  .theme-toggle:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 4px 12px var(--shadow-lg);
+    transform: translateY(-1px);
+  }
+
+  /* ─── COVER ─── */
+  .cover {
+    background: linear-gradient(135deg, var(--accent) 0%, #1e1e35 50%, #151525 100%);
+    color: #e8e4d8;
+    padding: 110px 60px 90px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 8px 40px var(--shadow-lg);
+  }
+  [data-theme="dark"] .cover {
+    background: linear-gradient(135deg, #151525 0%, #0a0a0f 50%, #050508 100%);
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,.03) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,.03) 40px);
+    pointer-events: none;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(184, 148, 31, 0.12) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+    animation: float 8s ease-in-out infinite;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: -10%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(212, 168, 75, 0.06) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+    animation: float 10s ease-in-out infinite reverse;
+  }
+  .cover-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    margin-bottom: 28px;
+    animation: fadeInDown 0.8s ease-out;
+  }
+  .cover h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 300;
+    letter-spacing: -.01em;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    animation: fadeInUp 0.8s ease-out 0.2s both;
+  }
+  .cover h1 em {
+    font-style: italic;
+    color: var(--gold-light);
+    text-shadow: 0 0 30px rgba(155, 126, 70, 0.3);
+  }
+  .cover-sub {
+    font-size: 15px;
+    color: #9e9a8e;
+    max-width: 540px;
+    line-height: 1.6;
+    animation: fadeInUp 0.8s ease-out 0.4s both;
+  }
+  .cover-rule {
+    width: 80px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 100%);
+    margin: 28px 0;
+    animation: expandWidth 0.8s ease-out 0.3s both;
+  }
+
+  /* ─── LAYOUT ─── */
+  .doc {
+    max-width: 920px;
+    margin: -50px auto 0;
+    padding: 50px 50px 120px;
+    background: var(--paper);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -8px 40px var(--shadow-lg);
+    position: relative;
+    z-index: 1;
+    transition: background 0.4s ease, box-shadow 0.4s ease;
+  }
+
+  /* ─── SECTION ─── */
+  .section {
+    margin-top: 64px;
+    padding-top: 32px;
+    border-top: 1px solid var(--rule);
+    animation: fadeIn 0.6s ease-out;
+    scroll-margin-top: 80px;
+  }
+  .section:first-child { border-top: none; }
+
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 5px 14px;
+    background: linear-gradient(135deg, rgba(184, 148, 31, 0.15) 0%, rgba(184, 148, 31, 0.08) 100%);
+    border-radius: 24px;
+    border: 1px solid rgba(184, 148, 31, 0.2);
+    box-shadow: 0 2px 8px rgba(184, 148, 31, 0.1);
+  }
+  .section > h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+
+  /* ─── SUBSECTION ─── */
+  .sub {
+    margin-top: 36px;
+  }
+  .sub > h3 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .sub > h3 .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 400;
+    padding: 3px 8px;
+    background: rgba(107, 107, 128, 0.1);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+  }
+  .sub > h3 .tag:hover {
+    background: rgba(155, 126, 70, 0.15);
+    color: var(--gold);
+  }
+
+  /* ─── PROSE ─── */
+  p { margin-bottom: 14px; color: var(--muted); }
+  p:last-child { margin-bottom: 0; }
+
+  /* ─── DEFINITION LIST ─── */
+  .defs {
+    margin: 18px 0 18px 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 20px;
+    align-items: baseline;
+  }
+  .defs dt {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    white-space: nowrap;
+    padding-top: 2px;
+    font-weight: 600;
+  }
+  .defs dd { 
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ─── FORMULA BLOCK ─── */
+  .formula {
+    background: linear-gradient(135deg, var(--paper) 0%, #f5f3eb 100%);
+    border-left: 4px solid var(--gold);
+    padding: 26px 30px;
+    margin: 24px 0;
+    border-radius: 0 8px 8px 0;
+    overflow-x: auto;
+    box-shadow: 0 3px 16px var(--shadow);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease, border-color 0.25s ease;
+  }
+  [data-theme="dark"] .formula {
+    background: linear-gradient(135deg, var(--paper) 0%, #1a1a2e 100%);
+  }
+  .formula:hover {
+    transform: translateX(6px);
+    box-shadow: 0 6px 24px var(--shadow-lg);
+    border-left-color: var(--gold-light);
+  }
+  .formula .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  /* ─── STEP LIST ─── */
+  ol.steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 16px 0;
+  }
+  ol.steps > li {
+    counter-increment: step;
+    padding: 20px 0 20px 56px;
+    border-bottom: 1px solid var(--rule);
+    position: relative;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  ol.steps > li:hover {
+    background: rgba(155, 126, 70, 0.03);
+    transform: translateX(2px);
+  }
+  ol.steps > li:last-child { border-bottom: none; }
+  ol.steps > li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: .05em;
+    background: linear-gradient(135deg, rgba(155, 126, 70, 0.15) 0%, rgba(155, 126, 70, 0.08) 100%);
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+  }
+  ol.steps > li:hover::before {
+    background: linear-gradient(135deg, rgba(155, 126, 70, 0.25) 0%, rgba(155, 126, 70, 0.15) 100%);
+  }
+  ol.steps > li > strong {
+    display: block;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  /* ─── WARNING / NOTE BOX ─── */
+  .note {
+    background: linear-gradient(135deg, var(--warn-bg) 0%, #fdf8f0 100%);
+    border: 1px solid rgba(139, 69, 19, 0.3);
+    border-left: 4px solid var(--warn);
+    padding: 20px 24px;
+    border-radius: 0 8px 8px 0;
+    margin: 24px 0;
+    font-size: 15px;
+    color: var(--warn);
+    box-shadow: 0 3px 12px rgba(139, 69, 19, 0.12);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  [data-theme="dark"] .note {
+    background: linear-gradient(135deg, var(--warn-bg) 0%, #251508 100%);
+    border-color: rgba(232, 160, 96, 0.3);
+  }
+  .note:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(139, 69, 19, 0.18);
+    border-left-color: var(--gold);
+  }
+  .note strong { font-weight: 600; }
+
+  /* ─── INLINE CODE ─── */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--accent);
+    transition: all 0.2s ease;
+  }
+  code:hover {
+    background: rgba(155, 126, 70, 0.15);
+  }
+
+  /* ─── TABLE ─── */
+  .artifact-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 28px 0;
+    font-size: 15px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 3px 16px var(--shadow);
+    transition: box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .artifact-table:hover {
+    box-shadow: 0 6px 28px var(--shadow-lg);
+    transform: translateY(-2px);
+  }
+  .artifact-table thead tr {
+    background: linear-gradient(135deg, var(--accent) 0%, #1e1e35 100%);
+    color: #e8e4d8;
+  }
+  [data-theme="dark"] .artifact-table thead tr {
+    background: linear-gradient(135deg, #151525 0%, #0a0a0f 100%);
+  }
+  .artifact-table thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 400;
+  }
+  .artifact-table tbody tr:nth-child(even) { background: var(--paper); }
+  .artifact-table tbody tr:hover { background: rgba(155, 126, 70, 0.05); }
+  .artifact-table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--muted);
+    vertical-align: top;
+  }
+  .artifact-table tbody td:first-child {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  /* ─── CASE BLOCK ─── */
+  .cases {
+    background: linear-gradient(135deg, var(--paper) 0%, #f5f3eb 100%);
+    padding: 20px 26px;
+    margin: 18px 0;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow-x: auto;
+    box-shadow: 0 3px 12px var(--shadow);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  [data-theme="dark"] .cases {
+    background: linear-gradient(135deg, var(--paper) 0%, #1a1a2e 100%);
+  }
+  .cases:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 24px var(--shadow-lg);
+    border-color: var(--gold);
+  }
+
+  /* ─── FOOTER ─── */
+  .doc-footer {
+    margin-top: 100px;
+    padding-top: 28px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .12em;
+    color: var(--faint);
+    text-transform: uppercase;
+    position: relative;
+  }
+  .doc-footer::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--gold) 0%, transparent 100%);
+  }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes expandWidth {
+    from { width: 0; }
+    to { width: 80px; }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(20px, -20px); }
+  }
+
+  @media (max-width: 768px) {
+    .nav {
+      padding: 10px 20px;
+    }
+    .nav-links {
+      gap: 12px;
+    }
+    .nav-links a {
+      font-size: 10px;
+      padding: 4px 8px;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .doc { 
+      padding: 20px 20px 80px; 
+      margin-top: -20px;
+      border-radius: 8px 8px 0 0;
+    }
+    .cover { padding: 50px 24px 50px; }
+    .defs { grid-template-columns: 1fr; gap: 4px 0; }
+    .defs dt { margin-top: 8px; }
+    ol.steps > li { padding-left: 40px; }
+    .cover::after { display: none; }
+    .nav-links {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ NAVIGATION ═══════════════════ -->
+<nav class="nav">
+  <ul class="nav-links">
+    <li><a href="#section-1">Notations</a></li>
+    <li><a href="#section-2">Bruit</a></li>
+    <li><a href="#section-3">Univers</a></li>
+    <li><a href="#section-4">KEM</a></li>
+  </ul>
+  <button class="theme-toggle" onclick="toggleTheme()">🌙 Mode</button>
+</nav>
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<div class="cover">
+  <div class="cover-label">Spécification Cryptographique · v1.0</div>
+  <h1><em>Aetherium</em><br>Ultra KEM</h1>
+  <div class="cover-rule"></div>
+  <p class="cover-sub">
+    Modélisation formelle complète en notations mathématiques de la logique implémentée
+    dans le protocole Aetherium : générateur de bruit, automate chaotique,
+    encapsulation et décapsulation.
+  </p>
+</div>
+
+<!-- ═══════════════════ DOCUMENT ═══════════════════ -->
+<div class="doc">
+
+<!-- ─── SECTION 1 ─── -->
+<div class="section" id="section-1">
+  <div class="section-num">§ 1</div>
+  <h2>Notations et Primitives</h2>
+  <p>Les symboles suivants sont utilisés de manière uniforme dans toute la spécification.</p>
+  <dl class="defs">
+    <dt>$\mathcal{H}_{256}$</dt>
+    <dd>Fonction de hachage SHA-256 produisant un condensat de 32 octets (256 bits).</dd>
+    <dt>$\mathcal{H}_{\text{shake}}$</dt>
+    <dd>Fonction SHAKE-256 (XOF) configurée pour produire une sortie de 32 octets.</dd>
+    <dt>$\text{HKDF}$</dt>
+    <dd>Fonction de dérivation de clé basée sur HMAC-SHA-256.</dd>
+    <dt>$\,\|\,$</dt>
+    <dd>Opération de concaténation d'octets.</dd>
+    <dt>$\oplus$</dt>
+    <dd>Opération OU exclusif (XOR) bit-à-bit ou octet-à-octet.</dd>
+    <dt>$x \xleftarrow{\$} X$</dt>
+    <dd>Échantillonnage aléatoire uniforme d'une valeur $x$ dans un ensemble $X$.</dd>
+    <dt>$S[i]$</dt>
+    <dd>Le $i$-ème octet du vecteur $S \in \{0,1\}^{256}$, pour $i \in \{0,\dots,31\}$.</dd>
+    <dt>$\lfloor x \rfloor_t$</dt>
+    <dd>Troncature de $x$ aux $t$ premiers octets.</dd>
+  </dl>
+</div>
+
+<!-- ─── SECTION 2 ─── -->
+<div class="section" id="section-2">
+  <div class="section-num">§ 2</div>
+  <h2>Générateur de Bruit Quantique $N$</h2>
+  <p>
+    Le générateur injecte une entropie composite simulée à partir de plusieurs sources
+    physiques locales. À chaque appel, la fonction $N()$ produit un vecteur de bruit
+    temporel $\eta \in \{0,1\}^{256}$.
+  </p>
+
+  <div class="sub">
+    <h3>Sources d'entropie composite <span class="tag">def. 2.1</span></h3>
+    <p>Soient les quatre mesures locales instantanées :</p>
+    <div class="formula">
+      <div class="label">Sources brutes</div>
+      $$
+      \begin{aligned}
+        \tau &\;=\; \text{time\_ns}() \bmod 2^{64} &\quad& \text{(horodatage UNIX en nanosecondes)}\\
+        \rho &\;\xleftarrow{\$}\; \{0,1\}^{64}      &\quad& \text{(entropie OS via \texttt{os.urandom})}\\
+        \phi &\;=\; \text{cpu\_time\_ns}() \bmod 2^{64} &\quad& \text{(temps CPU du processus)}\\
+        \pi &\;=\; \text{getpid}() \bmod 2^{32}   &\quad& \text{(identifiant du processus)}
+      \end{aligned}
+      $$
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3>Bruit final $\eta$ <span class="tag">def. 2.2</span></h3>
+    <p>
+      Le bruit pour une itération donnée est obtenu par hachage de la concaténation
+      des quatre sources sérialisées en représentation grand-boutiste :
+    </p>
+    <div class="formula">
+      <div class="label">Formule du bruit</div>
+      $$
+      \boxed{\;
+        \eta \;=\; \mathcal{H}_{256}\!\bigl(
+          \tau_{\text{bytes}} \;\|\; \rho \;\|\; \phi_{\text{bytes}} \;\|\; \pi_{\text{bytes}}
+        \bigr) \;\in\; \{0,1\}^{256}
+      \;}
+      $$
+    </div>
+    <p>
+      Chaque appel produit une valeur distincte car $\tau$ et $\rho$ varient à chaque
+      invocation. La concaténation garantit que toute corrélation partielle entre sources
+      est cassée par la résistance aux collisions de SHA-256.
+    </p>
+  </div>
+</div>
+
+<!-- ─── SECTION 3 ─── -->
+<div class="section" id="section-3">
+  <div class="section-num">§ 3</div>
+  <h2>Évolution de l'Univers Aetherium $E$</h2>
+  <p>
+    L'Univers est un automate cellulaire chaotique modélisé par une fonction d'évolution $E$.
+    Soient $PK \in \{0,1\}^*$ la clé publique du destinataire,
+    $S_0 \xleftarrow{\$} \{0,1\}^{256}$ l'état initial aléatoire,
+    et $\epsilon \xleftarrow{\$} \{0,1\}^{256}$ un vecteur aléatoire d'entrée.
+    Le nombre de tours est fixé à $R = 32$.
+  </p>
+
+  <div class="sub">
+    <h3>Boucle d'évolution <span class="tag">def. 3.1</span></h3>
+    <p>Pour chaque tour $r \in \{0, 1, \dots, R-1\}$ :</p>
+    <ol class="steps">
+      <li>
+        <strong>Génération du bruit local</strong>
+        $$\eta_r \;=\; N() \;\in\; \{0,1\}^{256}$$
+      </li>
+      <li>
+        <strong>État intermédiaire haché</strong>
+        <p>On forme le condensat de l'état courant, de la clé publique, du bruit et de l'index de tour :</p>
+        <div class="formula">
+          <div class="label">État intermédiaire</div>
+          $$
+          h_r \;=\; \mathcal{H}_{256}\!\bigl(
+            S_r \;\|\; PK \;\|\; \eta_r \;\|\; \langle r \rangle_4
+          \bigr) \;\in\; \{0,1\}^{256}
+          $$
+        </div>
+        <p style="margin-top:8px; font-size:15px;">où $\langle r \rangle_4$ désigne la sérialisation de $r$ sur 4 octets grand-boutiste.</p>
+      </li>
+      <li>
+        <strong>Application du masque chaotique (mutation XOR conditionnelle)</strong>
+        <p>
+          L'état est muté octet par octet selon une règle conditionnelle sur la parité
+          du bruit $\eta_r$ :
+        </p>
+        <div class="formula">
+          <div class="label">Mutation octet i</div>
+          $$
+          S_{r+1}[i] \;=\;
+          \begin{cases}
+            S_r[i] \;\oplus\; h_r[i]
+              & \text{si } \eta_r[i \bmod 32] \bmod 2 \;=\; 1 \\[6pt]
+            S_r[i]
+              & \text{sinon}
+          \end{cases}
+          \quad \forall\, i \in \{0,\dots,31\}
+          $$
+        </div>
+        <p style="margin-top:8px; font-size:15px;">
+          La condition de parité sur $\eta_r$ crée une sélectivité stochastique :
+          en moyenne, la moitié des octets est modifiée à chaque tour.
+        </p>
+      </li>
+    </ol>
+  </div>
+
+  <div class="sub">
+    <h3>État final <span class="tag">def. 3.2</span></h3>
+    <p>Après $R = 32$ itérations, l'état final est défini par :</p>
+    <div class="formula">
+      <div class="label">État chaotique final</div>
+      $$
+      \boxed{\;
+        S_{\text{final}} \;=\; E(PK,\, S_0,\, \epsilon)
+        \;=\; S_R
+        \;=\; S_0 \xrightarrow{\;(\eta_0, h_0)\;} S_1 \xrightarrow{\;(\eta_1, h_1)\;} \cdots \xrightarrow{\;(\eta_{31}, h_{31})\;} S_{32}
+      \;}
+      $$
+    </div>
+    <div class="note">
+      <strong>Note sur le déterminisme :</strong>
+      En raison de $\eta_r = N()$ qui dépend du temps réel $\tau = \text{time\_ns}()$,
+      deux exécutions de $E(PK, S_0, \epsilon)$ à des instants différents
+      produiront des états $S_{\text{final}}$ distincts avec probabilité $\approx 1$.
+      Ce non-déterminisme est intentionnel pour l'initialisation, mais rend la
+      vérification distante impossible sans transmission de $S_{\text{final}}$ lui-même.
+    </div>
+  </div>
+</div>
+
+<!-- ─── SECTION 4 ─── -->
+<div class="section" id="section-4">
+  <div class="section-num">§ 4</div>
+  <h2>KEM Aetherium Ultra</h2>
+
+  <!-- ── Encapsulation ── -->
+  <div class="sub">
+    <h3>Algorithme d'Encapsulation — $\text{Encapsulate}(PK_{\text{rec}})$ <span class="tag">algo. 4.1</span></h3>
+    <p>
+      L'expéditeur génère l'artefact de transport et la clé de session finale
+      pour le destinataire possédant la clé publique $PK_{\text{rec}}$.
+    </p>
+    <ol class="steps">
+      <li>
+        <strong>Vecteur d'évolution aléatoire</strong>
+        $$\epsilon \;\xleftarrow{\$}\; \{0,1\}^{256}$$
+      </li>
+      <li>
+        <strong>Calcul de l'état chaotique</strong>
+        $$S_{\text{final}} \;=\; E(PK_{\text{rec}},\; S_0,\; \epsilon) \;\in\; \{0,1\}^{256}$$
+      </li>
+      <li>
+        <strong>Dérivation du vecteur de tri</strong>
+        <p>On dérive un vecteur de 32 octets liant l'état chaotique à la clé publique :</p>
+        <div class="formula">
+          <div class="label">Vecteur de tri</div>
+          $$
+          v_{\text{sort}} \;=\; \mathcal{H}_{\text{shake}}\!\bigl(
+            S_{\text{final}} \;\|\; PK_{\text{rec}}
+          \bigr) \;\in\; \{0,1\}^{256}
+          $$
+        </div>
+      </li>
+      <li>
+        <strong>Simulation Kyber — Génération des secrets</strong>
+        <p>
+          Dans l'implémentation simulatoire, les objets Kyber sont générés aléatoirement
+          (absence de vraie librairie KEM post-quantique) :
+        </p>
+        <div class="formula">
+          <div class="label">Simulation Kyber</div>
+          $$
+          C_{\text{kyber}} \;\xleftarrow{\$}\; \{0,1\}^{256}
+          \qquad\text{(ciphertext simulé)}
+          $$
+          $$
+          SS_{\text{kyber}} \;\xleftarrow{\$}\; \{0,1\}^{256}
+          \qquad\text{(secret partagé simulé)}
+          $$
+        </div>
+      </li>
+      <li>
+        <strong>Calcul de la clé de session</strong>
+        <p>La clé masquée est obtenue par XOR du secret Kyber et de l'état chaotique :</p>
+        <div class="formula">
+          <div class="label">Masque chaotique</div>
+          $$K_{\text{masked}} \;=\; SS_{\text{kyber}} \;\oplus\; S_{\text{final}} \;\in\; \{0,1\}^{256}$$
+        </div>
+        <p style="margin-top:10px;">La clé de session finale est dérivée par HKDF :</p>
+        <div class="formula">
+          <div class="label">Clé de session finale</div>
+          $$
+          \boxed{\;
+            K_{\text{final}} \;=\; \text{HKDF}\!\bigl(
+              K_{\text{masked}},\;
+              \text{salt} = PK_{\text{rec}},\;
+              \text{info} = \texttt{"aetherium-v1"}
+            \bigr) \;\in\; \{0,1\}^{256}
+          \;}
+          $$
+        </div>
+      </li>
+      <li>
+        <strong>Génération des preuves et de l'intégrité</strong>
+        <div class="formula">
+          <div class="label">Preuve de clé</div>
+          $$\Sigma \;=\; \mathcal{H}_{256}\!\bigl(K_{\text{final}} \;\|\; S_{\text{final}}\bigr) \;\in\; \{0,1\}^{256}$$
+        </div>
+        <div class="formula">
+          <div class="label">Preuve d'évolution</div>
+          $$\Pi \;=\; \mathcal{H}_{256}\!\bigl(\epsilon \;\|\; C_{\text{kyber}}\bigr) \;\in\; \{0,1\}^{256}$$
+        </div>
+        <div class="formula">
+          <div class="label">Tag d'intégrité (16 octets)</div>
+          $$C \;=\; \lfloor\, \mathcal{H}_{256}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \Pi\bigr) \,\rfloor_{16} \;\in\; \{0,1\}^{128}$$
+        </div>
+      </li>
+    </ol>
+
+    <p>L'Artefact transmis est le tuple :</p>
+    <div class="formula">
+      <div class="label">Artefact de transport</div>
+      $$\mathcal{A} \;=\; \bigl(\, C_{\text{kyber}},\; S_{\text{final}},\; \Sigma,\; \Pi,\; C,\; \epsilon \,\bigr)$$
+    </div>
+
+    <table class="artifact-table">
+      <thead><tr><th>Champ</th><th>Taille</th><th>Rôle</th></tr></thead>
+      <tbody>
+        <tr><td>$C_{\text{kyber}}$</td><td>32 oct.</td><td>Ciphertext KEM simulé</td></tr>
+        <tr><td>$S_{\text{final}}$</td><td>32 oct.</td><td>État chaotique partageable</td></tr>
+        <tr><td>$\Sigma$</td><td>32 oct.</td><td>Preuve de liaison clé ↔ état</td></tr>
+        <tr><td>$\Pi$</td><td>32 oct.</td><td>Preuve de liaison évolution ↔ ciphertext</td></tr>
+        <tr><td>$C$</td><td>16 oct.</td><td>Tag d'intégrité de l'artefact</td></tr>
+        <tr><td>$\epsilon$</td><td>32 oct.</td><td>Vecteur d'évolution aléatoire</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Decapsulation ── -->
+  <div class="sub">
+    <h3>Algorithme de Décapsulation — $\text{Decapsulate}(SK, \mathcal{A})$ <span class="tag">algo. 4.2</span></h3>
+    <p>
+      Le destinataire utilise sa clé privée $SK$ (et donc $PK$ associée) pour
+      reconstruire la clé de session à partir de l'Artefact $\mathcal{A}$.
+    </p>
+    <ol class="steps">
+      <li>
+        <strong>Vérification d'intégrité</strong>
+        <p>Recalculer le tag et comparer :</p>
+        <div class="formula">
+          <div class="label">Tag recalculé</div>
+          $$C' \;=\; \lfloor\, \mathcal{H}_{256}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \Pi\bigr) \,\rfloor_{16}$$
+        </div>
+        <div class="cases">
+          $$\text{Si } C' \;\neq\; C \;\Longrightarrow\; \text{Décapsulation avortée : } \bot$$
+        </div>
+      </li>
+      <li>
+        <strong>Tentative de vérification d'inversion quantique</strong>
+        <p>
+          Le destinataire tente de reconstruire l'état chaotique en réexécutant
+          l'automate avec les mêmes paramètres :
+        </p>
+        <div class="formula">
+          <div class="label">Reconstruction locale</div>
+          $$S'_{\text{final}} \;=\; E(PK,\; S_0,\; \epsilon)$$
+        </div>
+        <div class="note">
+          <strong>Défaillance structurelle :</strong>
+          Puisque $N()$ dépend de $\tau = \text{time\_ns}()$, l'exécution à l'instant $T_2 \neq T_1$
+          produit $\eta'_r \neq \eta_r$ et donc $S'_{\text{final}} \neq S_{\text{final}}$
+          avec probabilité $\approx 1$.
+          L'implémentation capture cette exception (<code>except Exception: pass</code>)
+          et poursuit avec $S_{\text{final}}$ reçu.
+        </div>
+      </li>
+      <li>
+        <strong>Reconstruction du vecteur et de la clé de session</strong>
+        <p>Le destinataire recalcule le vecteur de tri à partir de $S_{\text{final}}$ transmis :</p>
+        <div class="formula">
+          <div class="label">Vecteur de tri reconstruit</div>
+          $$v'_{\text{sort}} \;=\; \mathcal{H}_{\text{shake}}\!\bigl(S_{\text{final}} \;\|\; PK\bigr)$$
+        </div>
+        <p style="margin-top:10px;">
+          Le secret Kyber est re-tiré aléatoirement (simulation, absence de vraie décapsulation KEM) :
+        </p>
+        <div class="formula">
+          <div class="label">Secret Kyber re-simulé</div>
+          $$SS'_{\text{kyber}} \;\xleftarrow{\$}\; \{0,1\}^{256}$$
+        </div>
+        <p style="margin-top:10px;">La clé recouvrée est alors :</p>
+        <div class="formula">
+          <div class="label">Masque et clé recouvrée</div>
+          $$K'_{\text{masked}} \;=\; SS'_{\text{kyber}} \;\oplus\; S_{\text{final}}$$
+          $$\boxed{\;
+            K'_{\text{final}} \;=\; \text{HKDF}\!\bigl(
+              K'_{\text{masked}},\;
+              \text{salt} = PK,\;
+              \text{info} = \texttt{"aetherium-v1"}
+            \bigr)
+          \;}$$
+        </div>
+        <div class="note">
+          <strong>Conséquence :</strong>
+          Puisque $SS'_{\text{kyber}} \xleftarrow{\$}$ est re-tiré indépendamment de $SS_{\text{kyber}}$,
+          on a $K'_{\text{final}} \neq K_{\text{final}}$ sauf si les deux PRNG partagent la même
+          graine au même instant — ce qui illustre le caractère strictement <em>simulatoire</em>
+          de cette partie du protocole.
+          Un vrai KEM post-quantique (CRYSTALS-Kyber, NTRU, McEliece) garantirait
+          $SS'_{\text{kyber}} = SS_{\text{kyber}}$ par construction algébrique.
+        </div>
+      </li>
+    </ol>
+  </div>
+</div>
+
+<!-- ─── FOOTER ─── -->
+<div class="doc-footer">
+  <span>Aetherium Formal Spec · §1–§4</span>
+  <span>Simulatoire</span>
+</div>
+
+</div><!-- /doc -->
+
+<script>
+  // Theme toggle functionality
+  function toggleTheme() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    
+    // Update button text
+    const button = document.querySelector('.theme-toggle');
+    button.textContent = newTheme === 'dark' ? '☀️ Mode' : '🌙 Mode';
+  }
+
+  // Load saved theme on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    const button = document.querySelector('.theme-toggle');
+    button.textContent = savedTheme === 'dark' ? '☀️ Mode' : '🌙 Mode';
+  });
+
+  // Active navigation link highlighting
+  const sections = document.querySelectorAll('.section');
+  const navLinks = document.querySelectorAll('.nav-links a');
+
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(section => {
+      const sectionTop = section.offsetTop;
+      const sectionHeight = section.clientHeight;
+      if (scrollY >= sectionTop - 100) {
+        current = section.getAttribute('id');
+      }
+    });
+
+    navLinks.forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('href') === `#${current}`) {
+        link.classList.add('active');
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
