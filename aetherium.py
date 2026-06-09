@@ -335,88 +335,103 @@ def otp_decrypt(ciphertext: bytes, key: bytes) -> bytes:
 # § 6. DÉMONSTRATION — Adam et Hawa
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _separator(title: str = "") -> None:
-    w = 68
-    if title:
-        pad = (w - len(title) - 2) // 2
-        print(f"\n{'─' * pad} {title} {'─' * (w - pad - len(title) - 2)}")
-    else:
-        print("─" * w)
+from cli_output import (
+    banner,
+    fmt_bytes,
+    fmt_size,
+    info,
+    separator,
+    summary_line,
+    timed_phase,
+)
 
 
-def _fmt(label: str, data: bytes, secret: bool = False) -> None:
-    preview = "[PRIVÉE — non affichée]" if secret else data.hex()[:48] + "..."
-    print(f"  {label:<14} {preview}")
+def _artifact_size(artifact: AetheriumArtifact) -> int:
+    return (
+        len(artifact.C_kyber)
+        + len(artifact.S_final)
+        + len(artifact.sigma)
+        + len(artifact.tag)
+        + len(artifact.epsilon)
+    )
 
 
-def main() -> None:
-    print("═" * 68)
-    print("  AETHERIUM ULTRA KEM  — Démonstration complète")
+def main(verbose: bool = False) -> None:
     mode = "ML-KEM (Kyber512) [FIPS 203]" if _KYBER_AVAILABLE else "Stub HMAC-SHA256 [DEMO ONLY]"
-    print(f"  Mode KEM    : {mode}")
-    print(f"  Automate    : {ROUNDS} tours chaotiques déterministes")
-    print("═" * 68)
+    banner(
+        "AETHERIUM ULTRA KEM — Démonstration complète",
+        f"Mode KEM : {mode}  |  Automate : {ROUNDS} tours chaotiques",
+    )
 
-    # ── Génération des clés de Hawa ──────────────────────────────────────────
-    _separator("PHASE 0 — Génération des clés de Hawa")
-    hawa = kem_keygen()
-    _fmt("PK_Hawa",  hawa.pk)
-    _fmt("SK_Hawa",  hawa.sk, secret=True)
+    separator("PHASE 0 — Génération des clés de Hawa")
+    with timed_phase("kem_keygen", verbose):
+        hawa = kem_keygen()
+    fmt_bytes("PK_Hawa", hawa.pk, verbose=verbose)
+    fmt_bytes("SK_Hawa", hawa.sk, secret=True)
+    fmt_size("Taille PK", len(hawa.pk))
+    fmt_size("Taille SK", len(hawa.sk))
 
-    # ── Encapsulation par Adam ───────────────────────────────────────────────
-    _separator("PHASE 1 — Adam encapsule pour Hawa")
-    artifact, K_adam = encapsulate(hawa.pk)
-    _fmt("ε",         artifact.epsilon)
-    _fmt("S_final",   artifact.S_final)
-    _fmt("C_kyber",   artifact.C_kyber)
-    _fmt("Σ (sigma)", artifact.sigma)
-    _fmt("C (tag)",   artifact.tag)
-    _fmt("K_Adam",    K_adam, secret=True)
+    separator("PHASE 1 — Adam encapsule pour Hawa")
+    with timed_phase("encapsulate", verbose):
+        artifact, K_adam = encapsulate(hawa.pk)
+    fmt_bytes("ε", artifact.epsilon, verbose=verbose)
+    fmt_bytes("S_final", artifact.S_final, verbose=verbose)
+    fmt_bytes("C_kyber", artifact.C_kyber, verbose=verbose)
+    fmt_bytes("Σ (sigma)", artifact.sigma, verbose=verbose)
+    fmt_bytes("C (tag)", artifact.tag, verbose=verbose)
+    fmt_bytes("K_Adam", K_adam, secret=True)
+    fmt_size("Artefact total", _artifact_size(artifact))
+    info("Structure", "𝒜 = (C_kyber, S_final, Σ, C, ε) — tout public sauf SK")
 
-    # ── Décapsulation par Hawa ───────────────────────────────────────────────
-    _separator("PHASE 2 — Hawa décapsule l'artefact")
-    K_hawa = decapsulate(hawa.sk, hawa.pk, artifact)
+    separator("PHASE 2 — Hawa décapsule l'artefact")
+    with timed_phase("decapsulate", verbose):
+        K_hawa = decapsulate(hawa.sk, hawa.pk, artifact)
 
     if K_hawa is None:
-        print("  ✗ ÉCHEC — Décapsulation invalide (⊥)")
+        summary_line(False, "Décapsulation invalide (⊥)")
         return
 
-    _fmt("K_Hawa", K_hawa, secret=True)
+    fmt_bytes("K_Hawa", K_hawa, secret=True)
     keys_match = secure_eq(K_adam, K_hawa)
-    print(f"\n  Clés identiques ? {'✓  OUI — Accord établi' if keys_match else '✗  NON — Divergence'}")
+    summary_line(keys_match, "Clés identiques — accord établi" if keys_match else "Divergence des clés")
 
-    # ── Vérification de résistance à Eve ────────────────────────────────────
-    _separator("PHASE 3 — Test de résistance (Eve intercepte l'artefact)")
-    fake_sk  = os.urandom(KEY_BYTES)                         # Eve n'a pas SK_Hawa
-    fake_pk  = H256(b"aetherium:pk-derive:v1" + fake_sk)
-    K_eve    = decapsulate(fake_sk, fake_pk, artifact)
-    print(f"  Résultat Eve (fausse SK) : {'K_final ✗ (⊥ retourné)' if K_eve is None else 'SUCCÈS — FAILLE !'}")
+    separator("PHASE 3 — Test de résistance (Eve intercepte l'artefact)")
+    fake_sk = os.urandom(KEY_BYTES)
+    fake_pk = H256(b"aetherium:pk-derive:v1" + fake_sk)
+    K_eve = decapsulate(fake_sk, fake_pk, artifact)
+    summary_line(
+        K_eve is None,
+        "Eve (fausse SK) → rejetée (⊥)" if K_eve is None else "Eve (fausse SK) — FAILLE !",
+    )
 
-    tampered = AetheriumArtifact(                             # Artefact falsifié
-        C_kyber = artifact.C_kyber,
-        S_final = os.urandom(KEY_BYTES),                     # S_final altéré
-        sigma   = artifact.sigma,
-        tag     = artifact.tag,
-        epsilon = artifact.epsilon,
+    tampered = AetheriumArtifact(
+        C_kyber=artifact.C_kyber,
+        S_final=os.urandom(KEY_BYTES),
+        sigma=artifact.sigma,
+        tag=artifact.tag,
+        epsilon=artifact.epsilon,
     )
     K_tampered = decapsulate(hawa.sk, hawa.pk, tampered)
-    print(f"  Résultat Eve (artefact falsifié) : {'Rejeté ✓ (⊥)' if K_tampered is None else 'SUCCÈS — FAILLE !'}")
+    summary_line(
+        K_tampered is None,
+        "Eve (artefact falsifié) → rejeté (⊥)" if K_tampered is None else "Eve (artefact falsifié) — FAILLE !",
+    )
 
-    # ── Tunnel OTP ──────────────────────────────────────────────────────────
     if keys_match:
-        _separator("PHASE 4 — Tunnel OTP Adam → Hawa")
-        secret    = b"Protocole Aetherium : operationnel et deterministe."
-        cipher    = otp_encrypt(secret, K_adam)
+        separator("PHASE 4 — Tunnel OTP Adam → Hawa")
+        secret = b"Protocole Aetherium : operationnel et deterministe."
+        with timed_phase("otp_encrypt", verbose):
+            cipher = otp_encrypt(secret, K_adam)
         recovered = otp_decrypt(cipher, K_hawa)
-        print(f"  Original  : {secret.decode()}")
-        print(f"  Chiffré   : {cipher.hex()[:48]}...")
-        print(f"  Récupéré  : {recovered.decode()}")
-        print(f"  Intégrité : {'✓ OK' if recovered == secret else '✗ ÉCHEC'}")
+        info("Original", secret.decode())
+        fmt_bytes("Chiffré", cipher, verbose=verbose)
+        info("Récupéré", recovered.decode())
+        summary_line(recovered == secret, "Intégrité OTP")
 
-    print("\n" + "═" * 68)
-    print("  Propriété de correction : K_Adam = K_Hawa  ✓")
-    print("  Propriété de sécurité   : Eve → ⊥          ✓")
-    print("═" * 68 + "\n")
+    print("\n" + "═" * 72)
+    summary_line(keys_match, "Propriété de correction : K_Adam = K_Hawa")
+    summary_line(K_eve is None and K_tampered is None, "Propriété de sécurité : Eve → ⊥")
+    print("═" * 72 + "\n")
 
 
 if __name__ == "__main__":
