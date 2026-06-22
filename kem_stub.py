@@ -1,3 +1,4 @@
+import hashlib
 import os
 from typing import Tuple
 
@@ -6,6 +7,11 @@ try:
     from .utils import H256, xor_bytes
 except Exception:
     from utils import H256, xor_bytes
+
+
+def _variable_length_mask(pk: bytes, length: int) -> bytes:
+    """SHAKE-256 based mask of arbitrary length, derived from pk."""
+    return hashlib.shake_256(pk + b"kem-mask").digest(length)
 
 
 def keygen(seed: bytes = None) -> Tuple[bytes, bytes]:
@@ -17,13 +23,15 @@ def keygen(seed: bytes = None) -> Tuple[bytes, bytes]:
     return pk, sk
 
 
-def enc(pk: bytes, k_seed: bytes) -> Tuple[bytes, bytes]:
+def enc(pk: bytes, k_seed: bytes = None) -> Tuple[bytes, bytes]:
     """Deterministic KEM.Enc(pk; k_seed) -> (ciphertext, shared_secret)
 
     The ciphertext embeds k_seed xored with a mask derived from pk.
     """
-    mask = H256(pk + b"kem-mask")
-    C = xor_bytes(k_seed, mask[: len(k_seed)])
+    if k_seed is None:
+        k_seed = os.urandom(64)
+    mask = _variable_length_mask(pk, len(k_seed))
+    C = xor_bytes(k_seed, mask)
     SS = H256(k_seed + pk)
     return C, SS
 
@@ -34,7 +42,7 @@ def dec(sk: bytes, C: bytes) -> bytes:
     Recovers k_seed using sk -> pk, then derives SS.
     """
     pk = H256(sk)
-    mask = H256(pk + b"kem-mask")
-    k_seed = xor_bytes(C, mask[: len(C)])
+    mask = _variable_length_mask(pk, len(C))
+    k_seed = xor_bytes(C, mask)
     SS = H256(k_seed + pk)
     return SS

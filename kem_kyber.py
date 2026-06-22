@@ -18,30 +18,26 @@ if _KYBER is None:
 
 
 def keygen() -> Tuple[bytes, bytes]:
-    # pqcrypto API: keypair() -> (pk, sk)
-    if hasattr(_KYBER, "keypair"):
-        pk, sk = _KYBER.keypair()
-        return pk, sk
-    if hasattr(_KYBER, "generate_keypair"):
-        pk, sk = _KYBER.generate_keypair()
-        return pk, sk
+    for name in ("keypair", "generate_keypair"):
+        fn = getattr(_KYBER, name, None)
+        if fn is not None:
+            pk, sk = fn()
+            return pk, sk
     raise RuntimeError("Unsupported pqcrypto Kyber API")
 
 
 def enc(pk: bytes, k_seed: bytes = None) -> Tuple[bytes, bytes]:
-    # Most pqcrypto Kyber wrappers expose `encapsulate(pk)` -> (ct, ss)
-    if hasattr(_KYBER, "encapsulate"):
-        ct, ss = _KYBER.encapsulate(pk)
-        return ct, ss
-    if hasattr(_KYBER, "encrypt"):
-        ct, ss = _KYBER.encrypt(pk)
-        return ct, ss
+    for name in ("encaps", "encapsulate", "encrypt"):
+        fn = getattr(_KYBER, name, None)
+        if fn is not None:
+            ct, ss = fn(pk)
+            return ct, ss
     raise RuntimeError("Unsupported pqcrypto Kyber API for encapsulation")
 
 
 def dec(sk: bytes, C: bytes) -> bytes:
-    if hasattr(_KYBER, "decapsulate"):
-        return _KYBER.decapsulate(sk, C)
-    if hasattr(_KYBER, "decrypt"):
-        return _KYBER.decrypt(sk, C)
+    for name in ("decaps", "decapsulate", "decrypt"):
+        fn = getattr(_KYBER, name, None)
+        if fn is not None:
+            return fn(sk, C)
     raise RuntimeError("Unsupported pqcrypto Kyber API for decapsulation")
