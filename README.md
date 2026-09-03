@@ -1,210 +1,184 @@
 # Aetherium Ultra KEM
 
-## Hybrid Post-Quantum KEM + Deterministic Chaotic Automaton
+**Hybrid Post-Quantum Key Encapsulation Mechanism**
 
-Aetherium is a hybrid key encapsulation mechanism (KEM) designed to resist long-term quantum threats by combining:
+Aetherium is a hybrid KEM that derives a session key from two independent cryptographic layers:
 
-- a post-quantum algebraic KEM layer,
-- a deterministic chaotic automaton layer.
+1. **ML-KEM (Kyber-1024)** — algebraic post-quantum hardness (NIST FIPS 203, Level 5)
+2. **Deterministic chaotic automaton E(PK, ε)** — SHA3-512-based state evolution over 64 rounds
 
-The project is a research-oriented reference implementation in Python.
-
----
-
-## English / Français
-
-### What this project is
-
-Aetherium is a hybrid security architecture where the final session key is derived from:
-
-1. a post-quantum shared secret from a KEM,
-2. a deterministic chaotic state computed from the recipient public key and a public seed.
-
-This creates a layered defense: an attacker must break both the underlying KEM and the deterministic chaos function to recover the session key.
-
-### Ce qu'est le projet
-
-Aetherium est une architecture de sécurité hybride dans laquelle la clé de session finale est dérivée de :
-
-1. un secret partagé post-quantique issu d'un KEM,
-2. un état chaotique déterministe calculé à partir de la clé publique destinataire et d'une graine publique.
-
-Cela crée une défense en profondeur : un attaquant doit casser à la fois le KEM et la fonction chaotique déterministe pour retrouver la clé de session.
+The two secrets are fused via HKDF-SHA3-512 into a single 512-bit session key. An attacker must break **both** layers to recover the key.
 
 ---
 
-## Key Concepts / Concepts clés
+## Protocol Specification
 
-### Hybrid architecture / Architecture hybride
+### Parameters
 
-- `KEM layer` : supports an optional real post-quantum KEM backend when installed.
-- `Chaos layer` : deterministic automaton `E(PK, ε)` produces `S_final` from public inputs.
-- `HKDF layer` : fuses the two secrets into a single session key.
+| Parameter    | Value         | Description                            |
+|------------- |-------------- |----------------------------------------|
+| Hash         | SHA3-512      | All hash operations (H)               |
+| KDF          | HKDF-SHA3-512 | Key derivation function                |
+| Key size     | 512 bits      | Session key, automaton state, HKDF output |
+| Tag size     | 256 bits      | Integrity tag (truncated SHA3-512)     |
+| Rounds       | 64            | Chaotic automaton iterations           |
+| KEM backend  | ML-KEM-1024   | NIST FIPS 203, Level 5 (or stub)      |
 
-### Architecture hybride
+### Artifact Structure
 
-- `couche KEM` : supporte un backend post-quantique réel si installé.
-- `couche chaos` : l'automate déterministe `E(PK, ε)` produit `S_final` à partir d'entrées publiques.
-- `couche HKDF` : fusionne les deux secrets en une clé unique.
+The public artifact `A = (C_kyber, S_final, Σ, C, ε)` is transmitted from sender to recipient:
 
-### Security goals / Objectifs de sécurité
+| Field     | Size (bytes) | Description                                        |
+|---------- |------------- |----------------------------------------------------|
+| `C_kyber` | variable     | KEM ciphertext                                     |
+| `S_final` | 64           | Automaton final state                              |
+| `Σ`       | 64           | Binding proof `H(K_final ‖ S_final ‖ C_kyber)`    |
+| `C`       | 32           | Integrity tag `H(C_kyber ‖ S_final ‖ Σ ‖ ε)[:32]` |
+| `ε`       | 64           | Public seed for automaton                          |
 
-- Post-quantum resilience / Résistance post-quantique
-- Deterministic reproducibility / Reproductibilité déterministe
-- Artifact integrity / Intégrité des artefacts
-- Clear attack separation / Séparation stricte des couches
+### Encapsulation
 
----
+```
+Encapsulate(PK_rec) → (A, K_final)
 
-## Design Summary / Résumé de conception
-
-### Data flow / Flux de données
-
-1. Sender generates a random public seed `ε`.
-2. Sender computes `S_final = E(PK_rec, ε)`.
-3. Sender performs `KEM.Enc(pk_rec)` to obtain `(C_kyber, SS_kyber)`.
-4. Sender derives `K_final = HKDF(SS_kyber || S_final, salt=H(pk_rec), info="aetherium-v1")`.
-5. Sender builds artifact `A = (C_kyber, S_final, Σ, C, ε)` and sends it.
-
-### Protocol flow / Flux du protocole
-
-1. L'émetteur génère une graine publique `ε`.
-2. L'émetteur calcule `S_final = E(PK_rec, ε)`.
-3. L'émetteur exécute `KEM.Enc(pk_rec)` pour obtenir `(C_kyber, SS_kyber)`.
-4. L'émetteur dérive `K_final = HKDF(SS_kyber || S_final, salt=H(pk_rec), info="aetherium-v1")`.
-5. L'émetteur construit l'artefact `A = (C_kyber, S_final, Σ, C, ε)` et l'envoie.
-
-### Artifact validation / Validation de l'artefact
-
-On receipt, the recipient:
-
-- verifies the integrity tag `C`,
-- decapsulates the KEM ciphertext to recover `SS_kyber`,
-- recomputes `S_final` from `ε`,
-- derives `K_final` with the same HKDF formula,
-- checks the binding proof `Σ`.
-
-### Validation de l'artefact
-
-À la réception, le destinataire :
-
-- vérifie le tag d'intégrité `C`,
-- décapsule le ciphertext KEM pour retrouver `SS_kyber`,
-- recompute `S_final` à partir de `ε`,
-- dérive `K_final` avec la même formule HKDF,
-- vérifie la preuve de liaison `Σ`.
-
----
-
-## Implementation / Implémentation
-
-### Files / Fichiers
-
-- `aetherium.py` : core hybrid KEM implementation.
-- `chiffrement.py` : demonstrative LWE-like encryption module.
-- `aetherium_combined.py` : unified entrypoint and demo runner.
-- `tests/` : unit tests for Aetherium and chiffrement.
-
-### How it works / Comment ça marche
-
-- `aetherium.py` computes its chaos function deterministically, so the recipient can rebuild the same state.
-- The implementation supports a real KEM backend when `pqcrypto` or `kyber_py` is installed.
-- Without a real KEM, the repository still works with a deterministic stub for exploration and validation.
-
----
-
-## Getting started / Démarrage rapide
-
-### Requirements / Prérequis
-
-```bash
-python -m pip install pytest numpy
+1. ε  ←$ {0,1}^512
+2. S_final = E(PK_rec, ε)
+3. (C_kyber, SS_kyber) = KEM.Enc(PK_rec)
+4. K_final = HKDF(SS_kyber ‖ S_final, salt=H(PK_rec), info="aetherium-v1")
+5. Σ = H(K_final ‖ S_final ‖ C_kyber)
+6. C = H(C_kyber ‖ S_final ‖ Σ ‖ ε)[:32]
+7. Return A = (C_kyber, S_final, Σ, C, ε), K_final
 ```
 
-Optional:
+### Decapsulation
 
-```bash
-python -m pip install pqcrypto
+```
+Decapsulate(SK_rec, PK_rec, A) → K_final | ⊥
+
+1. C' = H(C_kyber ‖ S_final ‖ Σ ‖ ε)[:32]
+   if C' ≠ C → ⊥                           [integrity]
+2. SS_kyber = KEM.Dec(SK_rec, C_kyber)
+   if ⊥ → ⊥                                [KEM failure]
+3. S' = E(PK_rec, ε)
+   if S' ≠ S_final → ⊥                     [automaton mismatch]
+4. K_final = HKDF(SS_kyber ‖ S', salt=H(PK_rec), info="aetherium-v1")
+5. Σ' = H(K_final ‖ S' ‖ C_kyber)
+   if Σ' ≠ Σ → ⊥                           [binding proof]
+6. Return K_final
 ```
 
-### Run the hybrid demo / Exécuter la démo hybride
+All comparisons use constant-time digest comparison to resist timing side-channels.
+
+### Chaotic Automaton E(PK, ε)
+
+```
+E(PK, ε, rounds=64) → S_final ∈ {0,1}^512
+
+S_0 = H(ε ‖ PK)[:64]
+For r = 0 to rounds-1:
+    η_r = H(ε ‖ PK ‖ ⟨r⟩₄)
+    h_r = H(S_r ‖ PK ‖ η_r ‖ ⟨r⟩₄)
+    For i = 0 to 63:
+        if η_r[i mod 64] & 1 = 1:
+            S_{r+1}[i] = S_r[i] ⊕ h_r[i]
+        else:
+            S_{r+1}[i] = S_r[i]
+Return S_{rounds}
+```
+
+E is a **pure function**: same (PK, ε) always produces the same S_final. No external entropy is consumed during evolution.
+
+---
+
+## Security Goals
+
+| Property                     | Mechanism                                          |
+|----------------------------- |----------------------------------------------------|
+| Post-quantum resilience      | ML-KEM-1024 (NIST Level 5)                        |
+| Layered defense              | K_final depends on both KEM secret and chaos state |
+| Artifact integrity           | Truncated SHA3-512 tag over all artifact fields    |
+| Key-commitment resistance    | Binding proof Σ = H(K ‖ S ‖ C_kyber)              |
+| Timing-attack resistance     | All comparisons via `hmac.compare_digest`          |
+| Deterministic reproducibility| E(PK, ε) is a pure function                       |
+
+---
+
+## Project Structure
+
+```
+aetherium/
+├── aetherium.py       # Hybrid KEM: keygen, encapsulate, decapsulate
+├── automaton.py        # Deterministic chaotic automaton E(PK, ε)
+├── utils.py            # Cryptographic primitives (H512, HKDF, xor, compare)
+├── kem.py              # KEM dispatcher (Kyber or stub)
+├── kem_kyber.py        # ML-KEM-1024 wrapper (requires pqcrypto)
+├── kem_stub.py         # Deterministic HMAC-based stub for testing
+├── tests/
+│   └── test_aetherium.py  # Correctness, rejection, and primitive tests
+├── requirements.txt
+├── LICENSE             # Apache 2.0
+└── README.md
+```
+
+---
+
+## Usage
+
+### Install
+
+```bash
+pip install pytest
+# Optional: pip install pqcrypto   # for real ML-KEM-1024
+```
+
+### Run tests
 
 ```bash
 cd aetherium
-python aetherium_combined.py --action all
+python -m pytest tests/ -v
 ```
 
-### Run unit tests / Lancer les tests
+### API
 
-```bash
-python -m pytest -q
+```python
+from aetherium import keygen, encapsulate, decapsulate
+
+# Key generation
+kp = keygen()
+
+# Sender
+artifact, K_sender = encapsulate(kp.pk)
+
+# Recipient
+K_recipient = decapsulate(kp.sk, kp.pk, artifact)
+
+assert K_sender == K_recipient  # 512-bit shared session key
 ```
 
-### Run the encryption demo / Exécuter le chiffrement
+---
 
-```bash
-python aetherium_combined.py --action chiffrement
-```
+## KEM Backend
+
+When `pqcrypto` is installed, Aetherium uses **Kyber-1024** (NIST FIPS 203, Level 5). Without it, a deterministic HMAC-SHA256 stub is used for development and testing. The stub is **not post-quantum** and must not be used in production.
+
+The backend is selected automatically at import time via `kem.py`.
 
 ---
 
-## White paper elements / Éléments pour white paper
+## Status
 
-### Problem statement / Problème adressé
-
-Conventional KEMs can be broken by future quantum computers. Aetherium aims to harden the encapsulation process by adding a second entropy source that is deterministic and public, while remaining unpredictable without the private key and seed relationship.
-
-### Technical novelty / Innovation technique
-
-Aetherium is not just "KEM + chaos". It uses a deterministic chaotic automaton whose state depends on the recipient public key and a public seed. This state is fused with the KEM secret using HKDF, creating a hybrid key that depends on both algebraic hardness and chaotic state complexity.
-
-### Research value / Valeur de recherche
-
-- provides a reference Python implementation,
-- isolates the chaotic state function for analysis,
-- demonstrates how a deterministic entropy layer can be integrated with a KEM,
-- keeps the design reproducible and audit-friendly.
-
-### Contributions / Contributions
-
-- hybrid KEM construction with deterministic chaos,
-- clean implementation split across `aetherium.py`, `chiffrement.py`, and `aetherium_combined.py`,
-- unit tests and usage examples,
-- bilingual README for GitHub readers.
+- [x] Reference Python implementation
+- [x] Deterministic chaotic automaton (SHA3-512, 64 rounds)
+- [x] Hybrid KEM with HKDF fusion
+- [x] Artifact integrity and binding proofs
+- [x] Constant-time comparisons
+- [x] Unit tests (correctness + rejection)
+- [ ] Real ML-KEM-1024 backend integration testing
+- [ ] Formal security proof
+- [ ] Third-party audit
 
 ---
 
-## Status / Statut
+## License
 
-- ✅ Reference Python implementation complete
-- ✅ Deterministic chaos layer implemented
-- ✅ Unit tests passing
-- ⚠️ Real Kyber backend optional and installable with `pqcrypto`
-- 🔲 Third-party security audit pending
-- 🔲 Formal specification publication pending
-
----
-
-## License / Licence
-
-This project is released under the **Apache 2.0** license.
-
-Ce projet est distribué sous licence **Apache 2.0**.
-
----
-
-## Contact / Contribution
-
-Contributions are welcome. Please open issues or pull requests if you want to:
-
-- improve the chaotic automaton,
-- integrate a real post-quantum KEM backend,
-- strengthen security proofs,
-- make the implementation production-ready.
-
-Les contributions sont bienvenues. Ouvrez une issue ou une pull request si vous souhaitez :
-
-- améliorer l'automate chaotique,
-- intégrer un véritable backend KEM post-quantique,
-- renforcer les preuves de sécurité,
-- rendre l'implémentation prête pour la production.
+Apache 2.0. See [LICENSE](LICENSE).

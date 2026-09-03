@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aetherium — Spécification Mathématique Formelle</title>
+<title>Aetherium Ultra KEM — Formal Mathematical Specification</title>
 <script>
 MathJax = {
   tex: {
@@ -160,11 +160,14 @@ MathJax = {
   .cover::before {
     content: '';
     position: absolute;
-    inset: 0;
-    background:
-      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,.03) 40px),
-      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,.03) 40px);
+    bottom: -30%;
+    left: -10%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(212, 168, 75, 0.06) 0%, transparent 70%);
+    border-radius: 50%;
     pointer-events: none;
+    animation: float 10s ease-in-out infinite reverse;
   }
   .cover::after {
     content: '';
@@ -177,18 +180,6 @@ MathJax = {
     border-radius: 50%;
     pointer-events: none;
     animation: float 8s ease-in-out infinite;
-  }
-  .cover::before {
-    content: '';
-    position: absolute;
-    bottom: -30%;
-    left: -10%;
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, rgba(212, 168, 75, 0.06) 0%, transparent 70%);
-    border-radius: 50%;
-    pointer-events: none;
-    animation: float 10s ease-in-out infinite reverse;
   }
   .cover-label {
     font-family: 'JetBrains Mono', monospace;
@@ -534,69 +525,39 @@ MathJax = {
 
   /* ─── ANIMATIONS ─── */
   @keyframes fadeInDown {
-    from {
-      opacity: 0;
-      transform: translateY(-20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
-
   @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
-
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
   }
-
   @keyframes expandWidth {
     from { width: 0; }
     to { width: 80px; }
   }
-
   @keyframes float {
     0%, 100% { transform: translate(0, 0); }
     50% { transform: translate(20px, -20px); }
   }
 
   @media (max-width: 768px) {
-    .nav {
-      padding: 10px 20px;
-    }
-    .nav-links {
-      gap: 12px;
-    }
-    .nav-links a {
-      font-size: 10px;
-      padding: 4px 8px;
-    }
+    .nav { padding: 10px 20px; }
+    .nav-links { gap: 12px; }
+    .nav-links a { font-size: 10px; padding: 4px 8px; }
   }
-
   @media (max-width: 600px) {
-    .doc { 
-      padding: 20px 20px 80px; 
-      margin-top: -20px;
-      border-radius: 8px 8px 0 0;
-    }
+    .doc { padding: 20px 20px 80px; margin-top: -20px; border-radius: 8px 8px 0 0; }
     .cover { padding: 50px 24px 50px; }
     .defs { grid-template-columns: 1fr; gap: 4px 0; }
     .defs dt { margin-top: 8px; }
     ol.steps > li { padding-left: 40px; }
     .cover::after { display: none; }
-    .nav-links {
-      display: none;
-    }
+    .nav-links { display: none; }
   }
 </style>
 </head>
@@ -606,404 +567,461 @@ MathJax = {
 <nav class="nav">
   <ul class="nav-links">
     <li><a href="#section-1">Notations</a></li>
-    <li><a href="#section-2">Bruit</a></li>
-    <li><a href="#section-3">Univers</a></li>
-    <li><a href="#section-4">KEM</a></li>
+    <li><a href="#section-2">Automaton</a></li>
+    <li><a href="#section-3">Encapsulation</a></li>
+    <li><a href="#section-4">Decapsulation</a></li>
+    <li><a href="#section-5">Security</a></li>
   </ul>
-  <button class="theme-toggle" onclick="toggleTheme()">🌙 Mode</button>
+  <button class="theme-toggle" onclick="toggleTheme()">Mode</button>
 </nav>
 
 <!-- ═══════════════════ COVER ═══════════════════ -->
 <div class="cover">
-  <div class="cover-label">Spécification Cryptographique · v1.0</div>
+  <div class="cover-label">Formal Cryptographic Specification &middot; v2.0</div>
   <h1><em>Aetherium</em><br>Ultra KEM</h1>
   <div class="cover-rule"></div>
   <p class="cover-sub">
-    Modélisation formelle complète en notations mathématiques de la logique implémentée
-    dans le protocole Aetherium : générateur de bruit, automate chaotique,
-    encapsulation et décapsulation.
+    Complete formal specification of the Aetherium hybrid post-quantum
+    key encapsulation mechanism: deterministic chaotic automaton,
+    HKDF-SHA3-512 fusion, artifact integrity, and binding proofs.
+    All formulas correspond to the reference Python implementation.
   </p>
 </div>
 
 <!-- ═══════════════════ DOCUMENT ═══════════════════ -->
 <div class="doc">
 
-<!-- ─── SECTION 1 ─── -->
+<!-- ─── SECTION 1 : NOTATIONS ─── -->
 <div class="section" id="section-1">
-  <div class="section-num">§ 1</div>
-  <h2>Notations et Primitives</h2>
-  <p>Les symboles suivants sont utilisés de manière uniforme dans toute la spécification.</p>
+  <div class="section-num">&sect; 1</div>
+  <h2>Notations and Primitives</h2>
+  <p>The following symbols are used uniformly throughout this specification.</p>
   <dl class="defs">
-    <dt>$\mathcal{H}_{256}$</dt>
-    <dd>Fonction de hachage SHA-256 produisant un condensat de 32 octets (256 bits).</dd>
-    <dt>$\mathcal{H}_{\text{shake}}$</dt>
-    <dd>Fonction SHAKE-256 (XOF) configurée pour produire une sortie de 32 octets.</dd>
+    <dt>$\mathcal{H}$</dt>
+    <dd>SHA3-512 hash function producing a 64-byte (512-bit) digest. All hash operations in Aetherium use SHA3-512 unless otherwise stated.</dd>
     <dt>$\text{HKDF}$</dt>
-    <dd>Fonction de dérivation de clé basée sur HMAC-SHA-256.</dd>
+    <dd>HKDF key derivation function based on HMAC-SHA3-512 (extract-then-expand, RFC 5869 structure).</dd>
     <dt>$\,\|\,$</dt>
-    <dd>Opération de concaténation d'octets.</dd>
+    <dd>Byte concatenation operator.</dd>
     <dt>$\oplus$</dt>
-    <dd>Opération OU exclusif (XOR) bit-à-bit ou octet-à-octet.</dd>
+    <dd>Bitwise exclusive-or (XOR) operator, applied byte-by-byte.</dd>
     <dt>$x \xleftarrow{\$} X$</dt>
-    <dd>Échantillonnage aléatoire uniforme d'une valeur $x$ dans un ensemble $X$.</dd>
+    <dd>Uniform random sampling of $x$ from the set $X$, via <code>os.urandom</code>.</dd>
     <dt>$S[i]$</dt>
-    <dd>Le $i$-ème octet du vecteur $S \in \{0,1\}^{256}$, pour $i \in \{0,\dots,31\}$.</dd>
+    <dd>The $i$-th byte of state vector $S \in \{0,1\}^{512}$, for $i \in \{0,\dots,63\}$.</dd>
     <dt>$\lfloor x \rfloor_t$</dt>
-    <dd>Troncature de $x$ aux $t$ premiers octets.</dd>
+    <dd>Truncation of $x$ to its first $t$ bytes.</dd>
+    <dt>$\langle r \rangle_4$</dt>
+    <dd>Big-endian serialization of integer $r$ on 4 bytes.</dd>
+    <dt>$R$</dt>
+    <dd>Number of automaton rounds. Fixed at $R = 64$.</dd>
   </dl>
+
+  <div class="sub">
+    <h3>Cryptographic Parameters <span class="tag">def. 1.1</span></h3>
+    <table class="artifact-table">
+      <thead><tr><th>Parameter</th><th>Value</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Hash function</td><td>SHA3-512</td><td>All $\mathcal{H}$ operations</td></tr>
+        <tr><td>KDF</td><td>HKDF-SHA3-512</td><td>Key derivation (extract + expand)</td></tr>
+        <tr><td>Key size</td><td>512 bits (64 bytes)</td><td>Session key, automaton state, epsilon</td></tr>
+        <tr><td>Tag size</td><td>256 bits (32 bytes)</td><td>Truncated integrity tag</td></tr>
+        <tr><td>Rounds ($R$)</td><td>64</td><td>Chaotic automaton iterations</td></tr>
+        <tr><td>KEM backend</td><td>ML-KEM-1024</td><td>NIST FIPS 203, Level 5</td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
-<!-- ─── SECTION 2 ─── -->
+<!-- ─── SECTION 2 : AUTOMATON ─── -->
 <div class="section" id="section-2">
-  <div class="section-num">§ 2</div>
-  <h2>Générateur de Bruit Quantique $N$</h2>
+  <div class="section-num">&sect; 2</div>
+  <h2>Deterministic Chaotic Automaton $E$</h2>
   <p>
-    Le générateur injecte une entropie composite simulée à partir de plusieurs sources
-    physiques locales. À chaque appel, la fonction $N()$ produit un vecteur de bruit
-    temporel $\eta \in \{0,1\}^{256}$.
+    The automaton $E$ is a <strong>pure deterministic function</strong> that maps a public key
+    $PK$ and a public seed $\varepsilon$ to a 512-bit final state $S_{\text{final}}$.
+    No external entropy is consumed during evolution &mdash;
+    the same $(PK, \varepsilon)$ always produces the same $S_{\text{final}}$.
   </p>
 
   <div class="sub">
-    <h3>Sources d'entropie composite <span class="tag">def. 2.1</span></h3>
-    <p>Soient les quatre mesures locales instantanées :</p>
+    <h3>Initial State <span class="tag">def. 2.1</span></h3>
     <div class="formula">
-      <div class="label">Sources brutes</div>
+      <div class="label">State initialization</div>
       $$
-      \begin{aligned}
-        \tau &\;=\; \text{time\_ns}() \bmod 2^{64} &\quad& \text{(horodatage UNIX en nanosecondes)}\\
-        \rho &\;\xleftarrow{\$}\; \{0,1\}^{64}      &\quad& \text{(entropie OS via \texttt{os.urandom})}\\
-        \phi &\;=\; \text{cpu\_time\_ns}() \bmod 2^{64} &\quad& \text{(temps CPU du processus)}\\
-        \pi &\;=\; \text{getpid}() \bmod 2^{32}   &\quad& \text{(identifiant du processus)}
-      \end{aligned}
-      $$
-    </div>
-  </div>
-
-  <div class="sub">
-    <h3>Bruit final $\eta$ <span class="tag">def. 2.2</span></h3>
-    <p>
-      Le bruit pour une itération donnée est obtenu par hachage de la concaténation
-      des quatre sources sérialisées en représentation grand-boutiste :
-    </p>
-    <div class="formula">
-      <div class="label">Formule du bruit</div>
-      $$
-      \boxed{\;
-        \eta \;=\; \mathcal{H}_{256}\!\bigl(
-          \tau_{\text{bytes}} \;\|\; \rho \;\|\; \phi_{\text{bytes}} \;\|\; \pi_{\text{bytes}}
-        \bigr) \;\in\; \{0,1\}^{256}
-      \;}
+      S_0 \;=\; \mathcal{H}\!\bigl(\varepsilon \;\|\; PK\bigr)\bigl[:64\bigr]
+      \;\in\; \{0,1\}^{512}
       $$
     </div>
     <p>
-      Chaque appel produit une valeur distincte car $\tau$ et $\rho$ varient à chaque
-      invocation. La concaténation garantit que toute corrélation partielle entre sources
-      est cassée par la résistance aux collisions de SHA-256.
+      The initial state is the first 64 bytes of $\mathcal{H}(\varepsilon \| PK)$.
+      Since SHA3-512 produces exactly 64 bytes, $S_0 = \mathcal{H}(\varepsilon \| PK)$.
     </p>
   </div>
-</div>
-
-<!-- ─── SECTION 3 ─── -->
-<div class="section" id="section-3">
-  <div class="section-num">§ 3</div>
-  <h2>Évolution de l'Univers Aetherium $E$</h2>
-  <p>
-    L'Univers est un automate cellulaire chaotique modélisé par une fonction d'évolution $E$.
-    Soient $PK \in \{0,1\}^*$ la clé publique du destinataire,
-    $S_0 \xleftarrow{\$} \{0,1\}^{256}$ l'état initial aléatoire,
-    et $\epsilon \xleftarrow{\$} \{0,1\}^{256}$ un vecteur aléatoire d'entrée.
-    Le nombre de tours est fixé à $R = 32$.
-  </p>
 
   <div class="sub">
-    <h3>Boucle d'évolution <span class="tag">def. 3.1</span></h3>
-    <p>Pour chaque tour $r \in \{0, 1, \dots, R-1\}$ :</p>
+    <h3>Evolution Loop <span class="tag">def. 2.2</span></h3>
+    <p>For each round $r \in \{0, 1, \dots, R-1\}$ with $R = 64$ :</p>
     <ol class="steps">
       <li>
-        <strong>Génération du bruit local</strong>
-        $$\eta_r \;=\; N() \;\in\; \{0,1\}^{256}$$
-      </li>
-      <li>
-        <strong>État intermédiaire haché</strong>
-        <p>On forme le condensat de l'état courant, de la clé publique, du bruit et de l'index de tour :</p>
+        <strong>Deterministic noise generation</strong>
         <div class="formula">
-          <div class="label">État intermédiaire</div>
+          <div class="label">Round noise</div>
           $$
-          h_r \;=\; \mathcal{H}_{256}\!\bigl(
-            S_r \;\|\; PK \;\|\; \eta_r \;\|\; \langle r \rangle_4
-          \bigr) \;\in\; \{0,1\}^{256}
+          \eta_r \;=\; \mathcal{H}\!\bigl(
+            \varepsilon \;\|\; PK \;\|\; \langle r \rangle_4
+          \bigr) \;\in\; \{0,1\}^{512}
           $$
         </div>
-        <p style="margin-top:8px; font-size:15px;">où $\langle r \rangle_4$ désigne la sérialisation de $r$ sur 4 octets grand-boutiste.</p>
+        <p style="margin-top:8px; font-size:15px;">
+          The noise is derived solely from public inputs and the round index &mdash;
+          no clock, no PRNG state, no side-channel information.
+        </p>
       </li>
       <li>
-        <strong>Application du masque chaotique (mutation XOR conditionnelle)</strong>
+        <strong>Intermediate hash</strong>
+        <div class="formula">
+          <div class="label">State digest</div>
+          $$
+          h_r \;=\; \mathcal{H}\!\bigl(
+            S_r \;\|\; PK \;\|\; \eta_r \;\|\; \langle r \rangle_4
+          \bigr) \;\in\; \{0,1\}^{512}
+          $$
+        </div>
+      </li>
+      <li>
+        <strong>Conditional XOR mutation</strong>
         <p>
-          L'état est muté octet par octet selon une règle conditionnelle sur la parité
-          du bruit $\eta_r$ :
+          Each byte of the state is conditionally XORed with the corresponding byte of $h_r$,
+          controlled by the parity of $\eta_r$ :
         </p>
         <div class="formula">
-          <div class="label">Mutation octet i</div>
+          <div class="label">Byte mutation rule</div>
           $$
           S_{r+1}[i] \;=\;
           \begin{cases}
             S_r[i] \;\oplus\; h_r[i]
-              & \text{si } \eta_r[i \bmod 32] \bmod 2 \;=\; 1 \\[6pt]
+              & \text{if } \eta_r[\,i \bmod 64\,] \;\&\; 1 \;=\; 1 \\[6pt]
             S_r[i]
-              & \text{sinon}
+              & \text{otherwise}
           \end{cases}
-          \quad \forall\, i \in \{0,\dots,31\}
+          \quad \forall\, i \in \{0,\dots,63\}
           $$
         </div>
         <p style="margin-top:8px; font-size:15px;">
-          La condition de parité sur $\eta_r$ crée une sélectivité stochastique :
-          en moyenne, la moitié des octets est modifiée à chaque tour.
+          The least significant bit of $\eta_r[i \bmod 64]$ determines whether byte $i$ is mutated.
+          On average, half of the 64 bytes are modified per round.
         </p>
       </li>
     </ol>
   </div>
 
   <div class="sub">
-    <h3>État final <span class="tag">def. 3.2</span></h3>
-    <p>Après $R = 32$ itérations, l'état final est défini par :</p>
+    <h3>Final State <span class="tag">def. 2.3</span></h3>
     <div class="formula">
-      <div class="label">État chaotique final</div>
+      <div class="label">Automaton output</div>
       $$
       \boxed{\;
-        S_{\text{final}} \;=\; E(PK,\, S_0,\, \epsilon)
+        S_{\text{final}} \;=\; E(PK,\, \varepsilon)
         \;=\; S_R
-        \;=\; S_0 \xrightarrow{\;(\eta_0, h_0)\;} S_1 \xrightarrow{\;(\eta_1, h_1)\;} \cdots \xrightarrow{\;(\eta_{31}, h_{31})\;} S_{32}
+        \;=\; S_0 \xrightarrow{\;(\eta_0, h_0)\;} S_1 \xrightarrow{\;(\eta_1, h_1)\;} \cdots \xrightarrow{\;(\eta_{63}, h_{63})\;} S_{64}
+        \;\in\; \{0,1\}^{512}
       \;}
       $$
     </div>
     <div class="note">
-      <strong>Note sur le déterminisme :</strong>
-      En raison de $\eta_r = N()$ qui dépend du temps réel $\tau = \text{time\_ns}()$,
-      deux exécutions de $E(PK, S_0, \epsilon)$ à des instants différents
-      produiront des états $S_{\text{final}}$ distincts avec probabilité $\approx 1$.
-      Ce non-déterminisme est intentionnel pour l'initialisation, mais rend la
-      vérification distante impossible sans transmission de $S_{\text{final}}$ lui-même.
+      <strong>Determinism property:</strong>
+      $E$ is a pure function. Given the same $(PK, \varepsilon)$, any party can independently
+      compute the same $S_{\text{final}}$. This is the foundation of the decapsulation
+      verification in &sect;4.
     </div>
   </div>
 </div>
 
-<!-- ─── SECTION 4 ─── -->
-<div class="section" id="section-4">
-  <div class="section-num">§ 4</div>
-  <h2>KEM Aetherium Ultra</h2>
+<!-- ─── SECTION 3 : ENCAPSULATION ─── -->
+<div class="section" id="section-3">
+  <div class="section-num">&sect; 3</div>
+  <h2>Encapsulation &mdash; $\text{Encapsulate}(PK_{\text{rec}})$</h2>
+  <p>
+    The sender generates a public artifact $\mathcal{A}$ and a secret session key
+    $K_{\text{final}}$ for the recipient holding public key $PK_{\text{rec}}$.
+  </p>
 
-  <!-- ── Encapsulation ── -->
+  <ol class="steps">
+    <li>
+      <strong>Sample public seed</strong>
+      $$\varepsilon \;\xleftarrow{\$}\; \{0,1\}^{512}$$
+    </li>
+    <li>
+      <strong>Compute chaotic state</strong>
+      $$S_{\text{final}} \;=\; E(PK_{\text{rec}},\; \varepsilon) \;\in\; \{0,1\}^{512}$$
+    </li>
+    <li>
+      <strong>KEM encapsulation (ML-KEM-1024)</strong>
+      <div class="formula">
+        <div class="label">Post-quantum KEM</div>
+        $$
+        \bigl(C_{\text{kyber}},\; SS_{\text{kyber}}\bigr) \;=\; \text{KEM.Enc}(PK_{\text{rec}})
+        $$
+      </div>
+      <p style="margin-top:8px; font-size:15px;">
+        $C_{\text{kyber}}$ is the KEM ciphertext (variable length).
+        $SS_{\text{kyber}}$ is the shared secret.
+        When <code>pqcrypto</code> is unavailable, a deterministic HMAC-based stub provides
+        the same interface for testing purposes.
+      </p>
+    </li>
+    <li>
+      <strong>Session key derivation (HKDF fusion)</strong>
+      <p>The KEM shared secret and the chaotic state are fused into a single session key :</p>
+      <div class="formula">
+        <div class="label">Key material</div>
+        $$K_{\text{mat}} \;=\; SS_{\text{kyber}} \;\|\; S_{\text{final}}$$
+      </div>
+      <div class="formula">
+        <div class="label">Session key</div>
+        $$
+        \boxed{\;
+          K_{\text{final}} \;=\; \text{HKDF}\!\bigl(
+            \text{salt} = \mathcal{H}(PK_{\text{rec}}),\;
+            \text{ikm} = K_{\text{mat}},\;
+            \text{info} = \texttt{"aetherium-v1"},\;
+            \text{len} = 64
+          \bigr) \;\in\; \{0,1\}^{512}
+        \;}
+        $$
+      </div>
+      <p style="margin-top:8px; font-size:15px;">
+        The salt is $\mathcal{H}(PK_{\text{rec}})$, binding the key derivation to the recipient's identity.
+        The IKM concatenates both secrets, ensuring $K_{\text{final}}$ depends on both layers.
+      </p>
+    </li>
+    <li>
+      <strong>Binding proof $\Sigma$</strong>
+      <div class="formula">
+        <div class="label">Binding proof</div>
+        $$\Sigma \;=\; \mathcal{H}\!\bigl(K_{\text{final}} \;\|\; S_{\text{final}} \;\|\; C_{\text{kyber}}\bigr) \;\in\; \{0,1\}^{512}$$
+      </div>
+      <p style="margin-top:8px; font-size:15px;">
+        $\Sigma$ binds the session key to the artifact contents. Without $K_{\text{final}}$,
+        an attacker cannot forge a valid $\Sigma$.
+      </p>
+    </li>
+    <li>
+      <strong>Integrity tag $C$</strong>
+      <div class="formula">
+        <div class="label">Truncated integrity tag</div>
+        $$C \;=\; \lfloor\, \mathcal{H}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \varepsilon\bigr) \,\rfloor_{32} \;\in\; \{0,1\}^{256}$$
+      </div>
+    </li>
+  </ol>
+
   <div class="sub">
-    <h3>Algorithme d'Encapsulation — $\text{Encapsulate}(PK_{\text{rec}})$ <span class="tag">algo. 4.1</span></h3>
-    <p>
-      L'expéditeur génère l'artefact de transport et la clé de session finale
-      pour le destinataire possédant la clé publique $PK_{\text{rec}}$.
-    </p>
-    <ol class="steps">
-      <li>
-        <strong>Vecteur d'évolution aléatoire</strong>
-        $$\epsilon \;\xleftarrow{\$}\; \{0,1\}^{256}$$
-      </li>
-      <li>
-        <strong>Calcul de l'état chaotique</strong>
-        $$S_{\text{final}} \;=\; E(PK_{\text{rec}},\; S_0,\; \epsilon) \;\in\; \{0,1\}^{256}$$
-      </li>
-      <li>
-        <strong>Dérivation du vecteur de tri</strong>
-        <p>On dérive un vecteur de 32 octets liant l'état chaotique à la clé publique :</p>
-        <div class="formula">
-          <div class="label">Vecteur de tri</div>
-          $$
-          v_{\text{sort}} \;=\; \mathcal{H}_{\text{shake}}\!\bigl(
-            S_{\text{final}} \;\|\; PK_{\text{rec}}
-          \bigr) \;\in\; \{0,1\}^{256}
-          $$
-        </div>
-      </li>
-      <li>
-        <strong>Simulation Kyber — Génération des secrets</strong>
-        <p>
-          Dans l'implémentation simulatoire, les objets Kyber sont générés aléatoirement
-          (absence de vraie librairie KEM post-quantique) :
-        </p>
-        <div class="formula">
-          <div class="label">Simulation Kyber</div>
-          $$
-          C_{\text{kyber}} \;\xleftarrow{\$}\; \{0,1\}^{256}
-          \qquad\text{(ciphertext simulé)}
-          $$
-          $$
-          SS_{\text{kyber}} \;\xleftarrow{\$}\; \{0,1\}^{256}
-          \qquad\text{(secret partagé simulé)}
-          $$
-        </div>
-      </li>
-      <li>
-        <strong>Calcul de la clé de session</strong>
-        <p>La clé masquée est obtenue par XOR du secret Kyber et de l'état chaotique :</p>
-        <div class="formula">
-          <div class="label">Masque chaotique</div>
-          $$K_{\text{masked}} \;=\; SS_{\text{kyber}} \;\oplus\; S_{\text{final}} \;\in\; \{0,1\}^{256}$$
-        </div>
-        <p style="margin-top:10px;">La clé de session finale est dérivée par HKDF :</p>
-        <div class="formula">
-          <div class="label">Clé de session finale</div>
-          $$
-          \boxed{\;
-            K_{\text{final}} \;=\; \text{HKDF}\!\bigl(
-              K_{\text{masked}},\;
-              \text{salt} = PK_{\text{rec}},\;
-              \text{info} = \texttt{"aetherium-v1"}
-            \bigr) \;\in\; \{0,1\}^{256}
-          \;}
-          $$
-        </div>
-      </li>
-      <li>
-        <strong>Génération des preuves et de l'intégrité</strong>
-        <div class="formula">
-          <div class="label">Preuve de clé</div>
-          $$\Sigma \;=\; \mathcal{H}_{256}\!\bigl(K_{\text{final}} \;\|\; S_{\text{final}}\bigr) \;\in\; \{0,1\}^{256}$$
-        </div>
-        <div class="formula">
-          <div class="label">Preuve d'évolution</div>
-          $$\Pi \;=\; \mathcal{H}_{256}\!\bigl(\epsilon \;\|\; C_{\text{kyber}}\bigr) \;\in\; \{0,1\}^{256}$$
-        </div>
-        <div class="formula">
-          <div class="label">Tag d'intégrité (16 octets)</div>
-          $$C \;=\; \lfloor\, \mathcal{H}_{256}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \Pi\bigr) \,\rfloor_{16} \;\in\; \{0,1\}^{128}$$
-        </div>
-      </li>
-    </ol>
-
-    <p>L'Artefact transmis est le tuple :</p>
+    <h3>Artifact Structure <span class="tag">def. 3.1</span></h3>
+    <p>The transmitted artifact is the tuple :</p>
     <div class="formula">
-      <div class="label">Artefact de transport</div>
-      $$\mathcal{A} \;=\; \bigl(\, C_{\text{kyber}},\; S_{\text{final}},\; \Sigma,\; \Pi,\; C,\; \epsilon \,\bigr)$$
+      <div class="label">Transport artifact</div>
+      $$\mathcal{A} \;=\; \bigl(\, C_{\text{kyber}},\; S_{\text{final}},\; \Sigma,\; C,\; \varepsilon \,\bigr)$$
     </div>
 
     <table class="artifact-table">
-      <thead><tr><th>Champ</th><th>Taille</th><th>Rôle</th></tr></thead>
+      <thead><tr><th>Field</th><th>Size</th><th>Role</th></tr></thead>
       <tbody>
-        <tr><td>$C_{\text{kyber}}$</td><td>32 oct.</td><td>Ciphertext KEM simulé</td></tr>
-        <tr><td>$S_{\text{final}}$</td><td>32 oct.</td><td>État chaotique partageable</td></tr>
-        <tr><td>$\Sigma$</td><td>32 oct.</td><td>Preuve de liaison clé ↔ état</td></tr>
-        <tr><td>$\Pi$</td><td>32 oct.</td><td>Preuve de liaison évolution ↔ ciphertext</td></tr>
-        <tr><td>$C$</td><td>16 oct.</td><td>Tag d'intégrité de l'artefact</td></tr>
-        <tr><td>$\epsilon$</td><td>32 oct.</td><td>Vecteur d'évolution aléatoire</td></tr>
+        <tr><td>$C_{\text{kyber}}$</td><td>variable</td><td>Post-quantum KEM ciphertext</td></tr>
+        <tr><td>$S_{\text{final}}$</td><td>64 bytes</td><td>Automaton final state (public, verifiable)</td></tr>
+        <tr><td>$\Sigma$</td><td>64 bytes</td><td>Binding proof $\mathcal{H}(K \| S \| C_{\text{kyber}})$</td></tr>
+        <tr><td>$C$</td><td>32 bytes</td><td>Integrity tag (truncated SHA3-512)</td></tr>
+        <tr><td>$\varepsilon$</td><td>64 bytes</td><td>Public seed for automaton</td></tr>
       </tbody>
     </table>
   </div>
+</div>
 
-  <!-- ── Decapsulation ── -->
+<!-- ─── SECTION 4 : DECAPSULATION ─── -->
+<div class="section" id="section-4">
+  <div class="section-num">&sect; 4</div>
+  <h2>Decapsulation &mdash; $\text{Decapsulate}(SK_{\text{rec}}, PK_{\text{rec}}, \mathcal{A})$</h2>
+  <p>
+    The recipient uses their secret key $SK_{\text{rec}}$ and public key $PK_{\text{rec}}$
+    to recover the session key $K_{\text{final}}$ from the artifact $\mathcal{A}$,
+    or reject with $\bot$ if any verification fails.
+    All comparisons use constant-time <code>hmac.compare_digest</code>.
+  </p>
+
+  <ol class="steps">
+    <li>
+      <strong>Integrity verification</strong>
+      <div class="formula">
+        <div class="label">Recompute tag</div>
+        $$C' \;=\; \lfloor\, \mathcal{H}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \varepsilon\bigr) \,\rfloor_{32}$$
+      </div>
+      <div class="cases">
+        $$\text{If } C' \;\neq\; C \;\Longrightarrow\; \bot \quad \text{(artifact tampered or replayed)}$$
+      </div>
+    </li>
+    <li>
+      <strong>KEM decapsulation</strong>
+      <div class="formula">
+        <div class="label">Recover shared secret</div>
+        $$SS_{\text{kyber}} \;=\; \text{KEM.Dec}(SK_{\text{rec}},\; C_{\text{kyber}})$$
+      </div>
+      <div class="cases">
+        $$\text{If KEM.Dec fails} \;\Longrightarrow\; \bot \quad \text{(wrong SK or corrupted ciphertext)}$$
+      </div>
+    </li>
+    <li>
+      <strong>Automaton state verification</strong>
+      <p>
+        The recipient independently recomputes the automaton state from the public seed :
+      </p>
+      <div class="formula">
+        <div class="label">Recompute automaton</div>
+        $$S'_{\text{final}} \;=\; E(PK_{\text{rec}},\; \varepsilon)$$
+      </div>
+      <div class="cases">
+        $$\text{If } S'_{\text{final}} \;\neq\; S_{\text{final}} \;\Longrightarrow\; \bot \quad \text{(PK mismatch or corrupted artifact)}$$
+      </div>
+      <div class="note">
+        <strong>Correctness:</strong>
+        Since $E$ is a pure function, the recipient's $S'_{\text{final}}$ is identical
+        to the sender's $S_{\text{final}}$ when computed with the same $PK$ and $\varepsilon$.
+        This step detects any corruption of $S_{\text{final}}$ or $\varepsilon$ in transit,
+        and confirms that the artifact was built for this specific recipient.
+      </div>
+    </li>
+    <li>
+      <strong>Session key reconstruction</strong>
+      <div class="formula">
+        <div class="label">Key derivation</div>
+        $$
+        K'_{\text{final}} \;=\; \text{HKDF}\!\bigl(
+          \text{salt} = \mathcal{H}(PK_{\text{rec}}),\;
+          \text{ikm} = SS_{\text{kyber}} \;\|\; S'_{\text{final}},\;
+          \text{info} = \texttt{"aetherium-v1"},\;
+          \text{len} = 64
+        \bigr)
+        $$
+      </div>
+    </li>
+    <li>
+      <strong>Binding proof verification</strong>
+      <div class="formula">
+        <div class="label">Verify Sigma</div>
+        $$\Sigma' \;=\; \mathcal{H}\!\bigl(K'_{\text{final}} \;\|\; S'_{\text{final}} \;\|\; C_{\text{kyber}}\bigr)$$
+      </div>
+      <div class="cases">
+        $$\text{If } \Sigma' \;\neq\; \Sigma \;\Longrightarrow\; \bot \quad \text{(key-commitment attack detected)}$$
+      </div>
+      <p style="margin-top:8px; font-size:15px;">
+        This final check ensures that the session key is consistent with the entire artifact.
+        An attacker who modifies $C_{\text{kyber}}$ after integrity passes (e.g. via tag collision)
+        would still fail this check because the binding proof includes $K_{\text{final}}$.
+      </p>
+    </li>
+  </ol>
+
   <div class="sub">
-    <h3>Algorithme de Décapsulation — $\text{Decapsulate}(SK, \mathcal{A})$ <span class="tag">algo. 4.2</span></h3>
+    <h3>Output <span class="tag">def. 4.1</span></h3>
+    <div class="formula">
+      <div class="label">Decapsulation result</div>
+      $$
+      \boxed{\;
+        \text{Decapsulate}(SK_{\text{rec}}, PK_{\text{rec}}, \mathcal{A}) \;=\;
+        \begin{cases}
+          K'_{\text{final}} \;\in\; \{0,1\}^{512}
+            & \text{if all 5 checks pass} \\[6pt]
+          \bot
+            & \text{otherwise}
+        \end{cases}
+      \;}
+      $$
+    </div>
+  </div>
+</div>
+
+<!-- ─── SECTION 5 : SECURITY ─── -->
+<div class="section" id="section-5">
+  <div class="section-num">&sect; 5</div>
+  <h2>Security Properties</h2>
+
+  <div class="sub">
+    <h3>Hybrid Security Argument <span class="tag">prop. 5.1</span></h3>
     <p>
-      Le destinataire utilise sa clé privée $SK$ (et donc $PK$ associée) pour
-      reconstruire la clé de session à partir de l'Artefact $\mathcal{A}$.
+      $K_{\text{final}}$ is computed as $\text{HKDF}(SS_{\text{kyber}} \| S_{\text{final}})$.
+      To recover $K_{\text{final}}$, an adversary must obtain <em>both</em> :
     </p>
-    <ol class="steps">
-      <li>
-        <strong>Vérification d'intégrité</strong>
-        <p>Recalculer le tag et comparer :</p>
-        <div class="formula">
-          <div class="label">Tag recalculé</div>
-          $$C' \;=\; \lfloor\, \mathcal{H}_{256}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \Pi\bigr) \,\rfloor_{16}$$
-        </div>
-        <div class="cases">
-          $$\text{Si } C' \;\neq\; C \;\Longrightarrow\; \text{Décapsulation avortée : } \bot$$
-        </div>
-      </li>
-      <li>
-        <strong>Tentative de vérification d'inversion quantique</strong>
-        <p>
-          Le destinataire tente de reconstruire l'état chaotique en réexécutant
-          l'automate avec les mêmes paramètres :
-        </p>
-        <div class="formula">
-          <div class="label">Reconstruction locale</div>
-          $$S'_{\text{final}} \;=\; E(PK,\; S_0,\; \epsilon)$$
-        </div>
-        <div class="note">
-          <strong>Défaillance structurelle :</strong>
-          Puisque $N()$ dépend de $\tau = \text{time\_ns}()$, l'exécution à l'instant $T_2 \neq T_1$
-          produit $\eta'_r \neq \eta_r$ et donc $S'_{\text{final}} \neq S_{\text{final}}$
-          avec probabilité $\approx 1$.
-          L'implémentation capture cette exception (<code>except Exception: pass</code>)
-          et poursuit avec $S_{\text{final}}$ reçu.
-        </div>
-      </li>
-      <li>
-        <strong>Reconstruction du vecteur et de la clé de session</strong>
-        <p>Le destinataire recalcule le vecteur de tri à partir de $S_{\text{final}}$ transmis :</p>
-        <div class="formula">
-          <div class="label">Vecteur de tri reconstruit</div>
-          $$v'_{\text{sort}} \;=\; \mathcal{H}_{\text{shake}}\!\bigl(S_{\text{final}} \;\|\; PK\bigr)$$
-        </div>
-        <p style="margin-top:10px;">
-          Le secret Kyber est re-tiré aléatoirement (simulation, absence de vraie décapsulation KEM) :
-        </p>
-        <div class="formula">
-          <div class="label">Secret Kyber re-simulé</div>
-          $$SS'_{\text{kyber}} \;\xleftarrow{\$}\; \{0,1\}^{256}$$
-        </div>
-        <p style="margin-top:10px;">La clé recouvrée est alors :</p>
-        <div class="formula">
-          <div class="label">Masque et clé recouvrée</div>
-          $$K'_{\text{masked}} \;=\; SS'_{\text{kyber}} \;\oplus\; S_{\text{final}}$$
-          $$\boxed{\;
-            K'_{\text{final}} \;=\; \text{HKDF}\!\bigl(
-              K'_{\text{masked}},\;
-              \text{salt} = PK,\;
-              \text{info} = \texttt{"aetherium-v1"}
-            \bigr)
-          \;}$$
-        </div>
-        <div class="note">
-          <strong>Conséquence :</strong>
-          Puisque $SS'_{\text{kyber}} \xleftarrow{\$}$ est re-tiré indépendamment de $SS_{\text{kyber}}$,
-          on a $K'_{\text{final}} \neq K_{\text{final}}$ sauf si les deux PRNG partagent la même
-          graine au même instant — ce qui illustre le caractère strictement <em>simulatoire</em>
-          de cette partie du protocole.
-          Un vrai KEM post-quantique (CRYSTALS-Kyber, NTRU, McEliece) garantirait
-          $SS'_{\text{kyber}} = SS_{\text{kyber}}$ par construction algébrique.
-        </div>
-      </li>
-    </ol>
+    <div class="formula">
+      <div class="label">Attack requirements</div>
+      $$
+      \begin{aligned}
+        &\text{(a)}\quad SS_{\text{kyber}} &&\text{requires breaking ML-KEM-1024 (NIST Level 5)} \\
+        &\text{(b)}\quad S_{\text{final}} &&\text{is public, but without } SS_{\text{kyber}} \text{, HKDF output is indistinguishable from random}
+      \end{aligned}
+      $$
+    </div>
+    <p>
+      If ML-KEM is IND-CCA2 secure and HKDF is a secure KDF, then knowledge of
+      $S_{\text{final}}$ alone provides no advantage in recovering $K_{\text{final}}$.
+      The chaotic automaton provides an additional security margin: even if the KEM
+      has a partial weakness, the attacker must also handle the HKDF fusion with the
+      automaton state.
+    </p>
+  </div>
+
+  <div class="sub">
+    <h3>Artifact Integrity <span class="tag">prop. 5.2</span></h3>
+    <p>
+      The tag $C = \lfloor \mathcal{H}(C_{\text{kyber}} \| S_{\text{final}} \| \Sigma \| \varepsilon) \rfloor_{32}$
+      covers all artifact fields. Any modification to any field changes $C'$ with
+      overwhelming probability (collision resistance of SHA3-512).
+    </p>
+  </div>
+
+  <div class="sub">
+    <h3>Binding Proof <span class="tag">prop. 5.3</span></h3>
+    <p>
+      $\Sigma = \mathcal{H}(K_{\text{final}} \| S_{\text{final}} \| C_{\text{kyber}})$
+      binds the session key to the artifact. An attacker cannot produce a valid $\Sigma$
+      without knowing $K_{\text{final}}$, which requires the private key $SK_{\text{rec}}$.
+      This prevents key-commitment and key-substitution attacks.
+    </p>
+  </div>
+
+  <div class="sub">
+    <h3>Timing Resistance <span class="tag">prop. 5.4</span></h3>
+    <p>
+      All equality checks in decapsulation use <code>hmac.compare_digest</code> (constant-time),
+      preventing timing side-channel attacks on the tag, the automaton state, and the binding proof.
+    </p>
   </div>
 </div>
 
 <!-- ─── FOOTER ─── -->
 <div class="doc-footer">
-  <span>Aetherium Formal Spec · §1–§4</span>
-  <span>Simulatoire</span>
+  <span>Aetherium Ultra KEM &middot; Formal Specification &sect;1&ndash;&sect;5</span>
+  <span>Reference Implementation</span>
 </div>
 
 </div><!-- /doc -->
 
 <script>
-  // Theme toggle functionality
   function toggleTheme() {
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
-    
-    // Update button text
     const button = document.querySelector('.theme-toggle');
-    button.textContent = newTheme === 'dark' ? '☀️ Mode' : '🌙 Mode';
+    button.textContent = newTheme === 'dark' ? 'Light' : 'Dark';
   }
 
-  // Load saved theme on page load
   document.addEventListener('DOMContentLoaded', () => {
     const savedTheme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
     const button = document.querySelector('.theme-toggle');
-    button.textContent = savedTheme === 'dark' ? '☀️ Mode' : '🌙 Mode';
+    button.textContent = savedTheme === 'dark' ? 'Light' : 'Dark';
   });
 
-  // Active navigation link highlighting
   const sections = document.querySelectorAll('.section');
   const navLinks = document.querySelectorAll('.nav-links a');
 
@@ -1011,12 +1029,10 @@ MathJax = {
     let current = '';
     sections.forEach(section => {
       const sectionTop = section.offsetTop;
-      const sectionHeight = section.clientHeight;
       if (scrollY >= sectionTop - 100) {
         current = section.getAttribute('id');
       }
     });
-
     navLinks.forEach(link => {
       link.classList.remove('active');
       if (link.getAttribute('href') === `#${current}`) {

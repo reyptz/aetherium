@@ -91,6 +91,3 @@ temp/
 
 # Windsurf AI
 .windsurfrules
-
-# Archive directory (keep structure but ignore contents)
-archive/*
