@@ -6,14 +6,15 @@ Verifies the algebraic facts stated in research/EqSD.md:
   - q = 2 (mod 5), so 5 is not a square mod q and X^2 - X - 1 is
     irreducible over F_q: R_q = F_q[X]/(X^2 - X - 1) is the field F_{q^2}
   - the multiplication matrix of a = a0 + a1*X in the basis (1, X)
-  - a counting bound on the number of other ternary preimages
+  - counting bounds: key uniqueness and absence of short collisions for
+    A_hat = [A | I], A uniform over R_q^(k x k)
 """
 import random
 from math import log2
 
 Q = 28657
-N_HAT, M_HAT = 644, 4484          # expanded (integer) dimensions
-K, L = N_HAT // 2, M_HAT // 2     # ring dimensions over R_q
+K = 704                          # dimension over R_q
+N_HAT = 2 * K                    # integer dimension: y = A s + e, s, e in {-1,0,1}^N_HAT
 
 
 def is_prime(p: int) -> bool:
@@ -79,17 +80,18 @@ def main() -> None:
         if a != (0, 0):
             assert mul(a, power(a, Q * Q - 2)) == (1, 0), "nonzero element not invertible"
 
-    # Uniqueness bound: for A uniform over R_q^{K x L} and z != 0 in R^L with
-    # small coefficients (|z_i| < q, so z mod q != 0), A z is uniform over
-    # R_q^K (R_q is a field), so Pr[A z = 0] = q^(-N_HAT). Union bound over
-    # the 3^M_HAT - 1 other ternary vectors x' (z = x - x'):
-    log2_bound = M_HAT * log2(3) - N_HAT * log2(Q)
+    # A_hat = [A | I], z = (z1, z2) != 0 with |z_i| < q. If z1 != 0, A z1 is
+    # uniform over R_q^K (R_q is a field): Pr[A_hat z = 0] = q^(-N_HAT).
+    # If z1 = 0, A_hat z = z2 != 0. Union bounds:
+    uniq = 2 * N_HAT * log2(3) - N_HAT * log2(Q)
+    coll = 2 * N_HAT * log2(5) - N_HAT * log2(Q)
     print(f"q = {Q} = F_23, prime, q mod 5 = {Q % 5}, R_q = F_q^2: OK")
     print("multiplication matrix and Fibonacci matrix: OK")
-    print(f"ring dims k x l = {K} x {L}  <->  integer dims {N_HAT} x {M_HAT}")
-    print(f"E[# other ternary preimages] <= 2^{log2_bound:.1f}")
-    print(f"public key y: {N_HAT} x ceil(log2 q) = {N_HAT * 15} bits = {N_HAT * 15 / 8:.1f} bytes")
-    print(f"secret x: ideal {M_HAT * log2(3) / 8:.1f} bytes, 2-bit coding {M_HAT * 2 / 8:.0f} bytes")
+    print(f"ring dim k = {K}  <->  integer dim {N_HAT}")
+    print(f"E[# other ternary keys with the same y] <= 2^{uniq:.1f}")
+    print(f"Pr[short collision, l_inf <= 2] <= 2^{coll:.1f}")
+    print(f"public key: {N_HAT} x 15 bits + 32-byte seed = {N_HAT * 15 // 8 + 32} bytes")
+    print(f"expanded secret (s, e), 2-bit coding: {2 * N_HAT * 2 // 8} bytes")
 
 
 if __name__ == "__main__":
