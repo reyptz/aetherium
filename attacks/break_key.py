@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-Aetherium Ultra KEM — adversarial break harness.
+Aetherium Ultra KEM v2 — adversarial break harness.
 
-Self-audit of the Aetherium hybrid KEM. The goal is literally "do everything
-to break the key": generate a key with the scheme, then run a battery of
-attacks against it and report, for each, whether the session key K_final (or a
-shared secret it depends on) was recovered or forged.
+Self-audit of the Aetherium hybrid KEM: generate a key with the scheme, then
+run a battery of attacks against it and report, for each, whether the session
+key K_final was recovered or a bad artifact was accepted.
 
 Run:
-    python attacks/break_key.py
+    python attacks/break_key.py                 # real ML-KEM-1024 backend
+    AETHERIUM_ALLOW_STUB=1 python attacks/break_key.py
+                                                # insecure stub: shows that
+                                                # X25519 alone still holds
 
-Every attack uses ONLY data an adversary could legitimately observe
-(public key + the transmitted artifact), unless a step is explicitly labelled
-as using a secret. Each attack returns a Result; the harness prints a summary
-and exits non-zero if any attack marked `must_fail_for_security` actually
-broke the key.
+Attacks use only what an eavesdropper or active attacker sees (public key +
+artifact), unless labelled as a simulated compromise of one layer. The harness
+exits non-zero if any attack breaks the key.
 
 These are tests against our OWN implementation, run locally, to find
 weaknesses before anyone else does. Nothing here targets a third party.
@@ -24,17 +24,22 @@ from __future__ import annotations
 
 import hashlib
 import os
+import subprocess
 import sys
-from dataclasses import dataclass, field
-from typing import Callable, List, Optional
+from dataclasses import dataclass
+from typing import Callable, List
 
-# Allow running from repo root or from inside attacks/.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 
 import kem  # noqa: E402
-from aetherium import keygen, encapsulate, decapsulate, Artifact  # noqa: E402
+from aetherium import (Artifact, keygen, encapsulate, decapsulate,  # noqa: E402
+                       derive_keys, transcript, _confirm, _tag, _split)
 from automaton import E  # noqa: E402
-from utils import H512, H256, hkdf  # noqa: E402
+from utils import H256  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.x25519 import (  # noqa: E402
+    X25519PrivateKey, X25519PublicKey)
+from cryptography.hazmat.primitives import serialization  # noqa: E402
 
 
 # -- Result bookkeeping -------------------------------------------------------
@@ -42,18 +47,16 @@ from utils import H512, H256, hkdf  # noqa: E402
 @dataclass
 class Result:
     name: str
-    broke_key: bool          # did the attack recover/forge the key?
+    broke_key: bool          # did the attack recover the key / get a bad artifact accepted?
     detail: str
-    # True when a successful break means the scheme is insecure (the attack
-    # SHOULD fail). False for attacks that are expected to be blocked and are
-    # only here to confirm a defense holds.
-    must_fail_for_security: bool = True
+    # False for observations that are not breaks (e.g. public values being public).
+    is_attack: bool = True
 
     @property
     def verdict(self) -> str:
-        if self.must_fail_for_security:
-            return "BROKEN" if self.broke_key else "resisted"
-        return "recovered" if self.broke_key else "blocked (good)"
+        if not self.is_attack:
+            return "info"
+        return "BROKEN" if self.broke_key else "resisted"
 
 
 ATTACKS: List[Callable[[], Result]] = []
@@ -64,204 +67,216 @@ def attack(fn: Callable[[], Result]) -> Callable[[], Result]:
     return fn
 
 
-# -- Attack 1: full key recovery from public data (stub KEM) ------------------
+def _x_raw(pub) -> bytes:
+    return pub.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 
-@attack
-def a01_full_key_recovery_from_public_artifact() -> Result:
-    """Recover K_final using ONLY pk + artifact, no secret key.
 
-    Root cause chain (stub backend):
-      * kem_stub mask = SHAKE256(pk || "kem-mask") depends only on the PUBLIC
-        pk, so k_seed = C_kyber XOR mask is recoverable by anyone, and the
-        shared secret SS = H256(k_seed || pk) with it.
-      * The chaos layer S_final = E(pk, epsilon) is a pure function of the
-        PUBLIC pk and the PUBLIC epsilon, so it is recomputable by anyone.
-      * K_final = HKDF(H512(pk), SS || S_final) therefore depends on no secret
-        at all once the KEM secret leaks.
+def _encapsulate_exposed(pk):
+    """Same steps as aetherium.encapsulate, but also returns both layer secrets.
+
+    Used only to SIMULATE the compromise of one layer. The result is checked
+    against decapsulate() so it cannot drift from the real code.
     """
-    kp = keygen()
-    artifact, K_real = encapsulate(kp.pk)
-
-    pk = kp.pk  # public
-
-    # Break the stub KEM shared secret from public values only.
-    mask = hashlib.shake_256(pk + b"kem-mask").digest(len(artifact.C_kyber))
-    k_seed = bytes(x ^ y for x, y in zip(artifact.C_kyber, mask))
-    ss = H256(k_seed + pk)
-
-    # Recompute the "chaos" layer (public pure function).
-    s_final = E(pk, artifact.epsilon)
-
-    k_attack = hkdf(H512(pk), ss + s_final, info=b"aetherium-v1", length=64)
-    broke = (k_attack == K_real)
-    backend = kem.impl.__name__
-    return Result(
-        "full-key-recovery-from-public-artifact",
-        broke,
-        f"backend={backend}; K_final reconstructed from pk+artifact only "
-        f"(match={broke})",
-    )
+    pk_pq, pk_x = _split(pk)
+    eps = os.urandom(64)
+    s_final = E(pk, eps)
+    c_kyber, ss_pq = kem.enc(pk_pq)
+    eph = X25519PrivateKey.generate()
+    c_x = _x_raw(eph.public_key())
+    ss_x = eph.exchange(X25519PublicKey.from_public_bytes(pk_x))
+    th = transcript(pk, c_kyber, c_x, s_final, eps)
+    k_final, k_conf = derive_keys(ss_pq, ss_x, pk, th)
+    sigma = _confirm(k_conf, th)
+    art = Artifact(C_kyber=c_kyber, C_x25519=c_x, S_final=s_final, Sigma=sigma,
+                   C=_tag(c_kyber, c_x, s_final, sigma, eps), epsilon=eps)
+    return art, k_final, ss_pq, ss_x
 
 
-# -- Attack 2: the chaos layer provides zero confidentiality ------------------
+def _retag(a: Artifact, **changes) -> Artifact:
+    f = dict(C_kyber=a.C_kyber, C_x25519=a.C_x25519, S_final=a.S_final,
+             Sigma=a.Sigma, epsilon=a.epsilon)
+    f.update(changes)
+    return Artifact(C=_tag(f["C_kyber"], f["C_x25519"], f["S_final"], f["Sigma"],
+                           f["epsilon"]), **f)
 
-@attack
-def a02_chaos_layer_is_public() -> Result:
-    """Show S_final leaks nothing: it is E(pk, epsilon), both public.
 
-    The README claims an attacker "must break BOTH layers". This attack shows
-    the chaos layer carries no secret, so breaking the KEM alone is enough —
-    the layers are NOT independent sources of secrecy.
+def _stub_secret(pk_pq: bytes, c_kyber: bytes) -> bytes:
+    """v1 break: the stub's mask depends on pk only, so (pk, ct) gives SS.
+
+    Returns the real secret when the stub is active, garbage against ML-KEM.
     """
-    kp = keygen()
-    artifact, _ = encapsulate(kp.pk)
-    # An attacker recomputes the automaton's final state bit-for-bit.
-    recomputed = E(kp.pk, artifact.epsilon)
-    broke = (recomputed == artifact.S_final)
-    return Result(
-        "chaos-layer-adds-no-secrecy",
-        broke,
-        f"S_final recomputed from public (pk, epsilon): match={broke}. "
-        "Second layer contributes integrity binding only, not confidentiality.",
-    )
+    mask = hashlib.shake_256(pk_pq + b"kem-mask").digest(len(c_kyber))
+    k_seed = bytes(x ^ y for x, y in zip(c_kyber, mask))
+    return H256(k_seed + pk_pq)
 
 
-# -- Attack 3: shared-secret recovery against the KEM in isolation ------------
-
-@attack
-def a03_kem_shared_secret_recovery() -> Result:
-    """Recover the KEM shared secret from (pk, ciphertext) without sk."""
-    pk, sk = kem.keygen()
-    ct, ss_real = kem.enc(pk)
-    backend = kem.impl.__name__
-    if backend != "kem_stub":
-        # Against a real KEM (Kyber) this attack is not expected to work; we
-        # report resisted rather than claiming a break we did not achieve.
-        return Result(
-            "kem-shared-secret-recovery",
-            False,
-            f"backend={backend}: no public-only recovery attempted/available.",
-        )
-    mask = hashlib.shake_256(pk + b"kem-mask").digest(len(ct))
-    k_seed = bytes(x ^ y for x, y in zip(ct, mask))
-    ss_attack = H256(k_seed + pk)
-    broke = (ss_attack == ss_real)
-    return Result(
-        "kem-shared-secret-recovery",
-        broke,
-        f"backend={backend}: SS recovered from (pk, ct) only, match={broke}.",
-    )
-
-
-# -- Attack 4: forge a valid artifact for a chosen key (key-commitment) -------
-
-@attack
-def a04_forge_artifact_for_chosen_key() -> Result:
-    """Given only pk, forge an artifact that decapsulates to a key we choose.
-
-    With the stub broken, an attacker controls k_seed, hence SS, hence the
-    whole derivation, and can emit an artifact that the honest recipient will
-    accept and whose K_final the attacker already knows.
-    """
-    kp = keygen()
-    pk = kp.pk
-    backend = kem.impl.__name__
-    if backend != "kem_stub":
-        return Result(
-            "forge-artifact-for-chosen-key",
-            False,
-            f"backend={backend}: forgery requires KEM control, not available.",
-            must_fail_for_security=True,
-        )
-
-    # Attacker picks k_seed freely and builds a self-consistent artifact.
-    chosen_seed = b"\xAA" * 64
-    mask = hashlib.shake_256(pk + b"kem-mask").digest(len(chosen_seed))
-    c_kyber = bytes(x ^ y for x, y in zip(chosen_seed, mask))
-    ss = H256(chosen_seed + pk)
-
-    epsilon = os.urandom(64)
-    s_final = E(pk, epsilon)
-    k_final = hkdf(H512(pk), ss + s_final, info=b"aetherium-v1", length=64)
-    sigma = H512(k_final + s_final + c_kyber)
-    tag = H512(c_kyber + s_final + sigma + epsilon)[:32]
-
-    forged = Artifact(C_kyber=c_kyber, S_final=s_final, Sigma=sigma, C=tag,
-                      epsilon=epsilon)
-
-    # Honest recipient decapsulates; does it accept and land on our key?
-    k_recipient = decapsulate(kp.sk, pk, forged)
-    broke = (k_recipient == k_final)
-    return Result(
-        "forge-artifact-for-chosen-key",
-        broke,
-        f"backend={backend}: recipient accepted forged artifact and derived "
-        f"the attacker-known key (match={broke}).",
-    )
-
-
-# -- Attack 5: tamper detection must hold (defense confirmation) --------------
-
-@attack
-def a05_tamper_is_rejected() -> Result:
-    """Flip a byte of the ciphertext and confirm decapsulation rejects it.
-
-    This one is expected to be BLOCKED; it confirms the integrity tag works.
-    """
-    kp = keygen()
-    artifact, _ = encapsulate(kp.pk)
-    bad_ct = bytearray(artifact.C_kyber)
-    bad_ct[0] ^= 0x01
-    tampered = Artifact(
-        C_kyber=bytes(bad_ct),
-        S_final=artifact.S_final,
-        Sigma=artifact.Sigma,
-        C=artifact.C,            # stale tag -> must be caught
-        epsilon=artifact.epsilon,
-    )
-    accepted = True
+def _accepted(sk, pk, art) -> bool:
     try:
-        decapsulate(kp.sk, kp.pk, tampered)
+        decapsulate(sk, pk, art)
+        return True
     except ValueError:
-        accepted = False
-    # broke_key == attack succeeded == tamper accepted
-    return Result(
-        "tamper-rejection",
-        accepted,
-        "flipped ciphertext byte " + ("ACCEPTED (bad)" if accepted
-                                      else "rejected (good)"),
-        must_fail_for_security=True,
-    )
+        return False
+
+
+# -- Attack 1: key recovery from public data only -----------------------------
+
+@attack
+def a01_public_only_key_recovery() -> Result:
+    """Eavesdropper: rebuild K_final from pk + artifact.
+
+    Uses the v1 stub break on the ML-KEM part (works only if the stub is
+    active) and has no way to obtain the X25519 secret, so it plugs in the
+    only public X25519 value it has.
+    """
+    kp = keygen()
+    art, k_real = encapsulate(kp.pk)
+    ss_pq_guess = _stub_secret(_split(kp.pk)[0], art.C_kyber)
+
+    th = transcript(kp.pk, art.C_kyber, art.C_x25519, art.S_final, art.epsilon)
+    k_guess, _ = derive_keys(ss_pq_guess, art.C_x25519, kp.pk, th)
+    broke = k_guess == k_real
+    return Result("public-only-key-recovery", broke,
+                  f"backend={kem.BACKEND}; match={broke}")
+
+
+# -- Attack 2: ML-KEM layer fully compromised ---------------------------------
+
+@attack
+def a02_mlkem_layer_compromised() -> Result:
+    """Simulate a total break of ML-KEM: the attacker knows SS_mlkem.
+
+    The key must still hold thanks to X25519.
+    """
+    kp = keygen()
+    art, k_real, ss_pq, _ = _encapsulate_exposed(kp.pk)
+    assert decapsulate(kp.sk, kp.pk, art) == k_real
+    th = transcript(kp.pk, art.C_kyber, art.C_x25519, art.S_final, art.epsilon)
+    # Best public substitutes for the missing X25519 secret.
+    guesses = [art.C_x25519, _split(kp.pk)[1], b"\x00" * 32]
+    broke = any(derive_keys(ss_pq, g, kp.pk, th)[0] == k_real for g in guesses)
+    return Result("mlkem-layer-compromised", broke,
+                  f"attacker knows SS_mlkem; X25519 still protects K: match={broke}")
+
+
+# -- Attack 3: X25519 layer fully compromised (quantum attacker) --------------
+
+@attack
+def a03_x25519_layer_compromised() -> Result:
+    """Simulate a quantum attacker that solves ECDLP: knows SS_x25519.
+
+    The key must still hold thanks to ML-KEM-1024.
+    """
+    kp = keygen()
+    art, k_real, _, ss_x = _encapsulate_exposed(kp.pk)
+    th = transcript(kp.pk, art.C_kyber, art.C_x25519, art.S_final, art.epsilon)
+    guesses = [H256(art.C_kyber), art.C_kyber[:32], b"\x00" * 32,
+               _stub_secret(_split(kp.pk)[0], art.C_kyber)]
+    broke = any(derive_keys(g, ss_x, kp.pk, th)[0] == k_real for g in guesses)
+    return Result("x25519-layer-compromised", broke,
+                  f"attacker knows SS_x25519; ML-KEM still protects K: match={broke}")
+
+
+# -- Attack 4: tamper with the ciphertext and re-tag --------------------------
+
+@attack
+def a04_tamper_and_retag() -> Result:
+    """Active attacker flips a ciphertext byte and recomputes the public tag C.
+
+    C is unkeyed, so recomputing it is easy; Sigma must catch the change.
+    """
+    kp = keygen()
+    art, _ = encapsulate(kp.pk)
+    ct = bytearray(art.C_kyber)
+    ct[0] ^= 0x01
+    accepted = _accepted(kp.sk, kp.pk, _retag(art, C_kyber=bytes(ct)))
+    return Result("tamper-ciphertext-and-retag", accepted,
+                  "modified C_kyber with valid tag " +
+                  ("ACCEPTED" if accepted else "rejected by Sigma"))
+
+
+# -- Attack 5: mix-and-match two artifacts ------------------------------------
+
+@attack
+def a05_mix_and_match() -> Result:
+    """Splice the ML-KEM part of one session with the X25519 part of another."""
+    kp = keygen()
+    a1, _ = encapsulate(kp.pk)
+    a2, _ = encapsulate(kp.pk)
+    spliced = _retag(a1, C_x25519=a2.C_x25519)
+    accepted = _accepted(kp.sk, kp.pk, spliced)
+    return Result("mix-and-match-sessions", accepted,
+                  "spliced artifact " + ("ACCEPTED" if accepted else "rejected"))
+
+
+# -- Attack 6: downgrade to the insecure stub ---------------------------------
+
+@attack
+def a06_backend_downgrade() -> Result:
+    """Hide the real ML-KEM backend and check Aetherium refuses to start."""
+    code = ("import sys; sys.modules['kem_kyber'] = None; "
+            "sys.path.insert(0, %r); import kem" % ROOT)
+    env = {k: v for k, v in os.environ.items() if k != "AETHERIUM_ALLOW_STUB"}
+    r = subprocess.run([sys.executable, "-c", code], env=env,
+                       capture_output=True, text=True)
+    downgraded = r.returncode == 0
+    return Result("silent-downgrade-to-stub", downgraded,
+                  "import without ML-KEM " +
+                  ("SUCCEEDED (silent downgrade)" if downgraded else "refused"))
+
+
+# -- Observation: the automaton is public -------------------------------------
+
+@attack
+def i01_automaton_is_public() -> Result:
+    kp = keygen()
+    art, _ = encapsulate(kp.pk)
+    same = E(kp.pk, art.epsilon) == art.S_final
+    return Result("automaton-state-is-public", same,
+                  f"S_final recomputable from (pk, epsilon): {same}. "
+                  "Expected: E binds context, it is not a secret.",
+                  is_attack=False)
+
+
+# -- Observation: anyone can encapsulate to a public key ----------------------
+
+@attack
+def i02_no_sender_authentication() -> Result:
+    kp = keygen()
+    art, k_attacker = encapsulate(kp.pk)  # anyone can do this with pk
+    ok = decapsulate(kp.sk, kp.pk, art) == k_attacker
+    return Result("no-sender-authentication", ok,
+                  "a third party can encapsulate to pk and share a key with the "
+                  "recipient. Normal for a KEM; authenticity needs a signature.",
+                  is_attack=False)
 
 
 # -- Runner -------------------------------------------------------------------
 
 def main() -> int:
     print("=" * 70)
-    print("Aetherium Ultra KEM — adversarial break harness")
-    print("KEM backend:", kem.impl.__name__)
+    print("Aetherium Ultra KEM v2 — adversarial break harness")
+    print("KEM backend:", kem.BACKEND)
     print("=" * 70)
 
     results = [fn() for fn in ATTACKS]
 
     width = max(len(r.name) for r in results)
-    insecure = 0
+    broken = 0
     for r in results:
         flag = ""
-        if r.must_fail_for_security and r.broke_key:
+        if r.is_attack and r.broke_key:
             flag = "  <== SECURITY BREAK"
-            insecure += 1
-        print(f"  {r.name.ljust(width)}  {r.verdict:>16}{flag}")
+            broken += 1
+        print(f"  {r.name.ljust(width)}  {r.verdict:>8}{flag}")
         print(f"      {r.detail}")
 
     print("=" * 70)
-    if insecure:
-        print(f"RESULT: {insecure} attack(s) BROKE the key. Scheme is insecure "
-              "in this configuration.")
+    if broken:
+        print(f"RESULT: {broken} attack(s) BROKE the key.")
     else:
         print("RESULT: no attack broke the key in this configuration.")
     print("=" * 70)
-    return 1 if insecure else 0
+    return 1 if broken else 0
 
 
 if __name__ == "__main__":

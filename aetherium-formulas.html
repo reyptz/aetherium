@@ -577,13 +577,13 @@ MathJax = {
 
 <!-- ═══════════════════ COVER ═══════════════════ -->
 <div class="cover">
-  <div class="cover-label">Formal Cryptographic Specification &middot; v2.0</div>
+  <div class="cover-label">Formal Cryptographic Specification &middot; protocol v2</div>
   <h1><em>Aetherium</em><br>Ultra KEM</h1>
   <div class="cover-rule"></div>
   <p class="cover-sub">
-    Complete formal specification of the Aetherium hybrid post-quantum
-    key encapsulation mechanism: deterministic chaotic automaton,
-    HKDF-SHA3-512 fusion, artifact integrity, and binding proofs.
+    Formal specification of the Aetherium hybrid key encapsulation mechanism:
+    ML-KEM-1024 and X25519 fused by HKDF-SHA3-512 over the full transcript,
+    a public chaotic automaton for context binding, and keyed key confirmation.
     All formulas correspond to the reference Python implementation.
   </p>
 </div>
@@ -602,7 +602,9 @@ MathJax = {
     <dt>$\text{HKDF}$</dt>
     <dd>HKDF key derivation function based on HMAC-SHA3-512 (extract-then-expand, RFC 5869 structure).</dd>
     <dt>$\,\|\,$</dt>
-    <dd>Byte concatenation operator.</dd>
+    <dd>Length-prefixed concatenation: each part is preceded by its length on 4 bytes (big-endian), so the encoding is unambiguous.</dd>
+    <dt>$\text{HMAC}_k$</dt>
+    <dd>HMAC-SHA3-512 keyed with $k$.</dd>
     <dt>$\oplus$</dt>
     <dd>Bitwise exclusive-or (XOR) operator, applied byte-by-byte.</dd>
     <dt>$x \xleftarrow{\$} X$</dt>
@@ -624,10 +626,13 @@ MathJax = {
       <tbody>
         <tr><td>Hash function</td><td>SHA3-512</td><td>All $\mathcal{H}$ operations</td></tr>
         <tr><td>KDF</td><td>HKDF-SHA3-512</td><td>Key derivation (extract + expand)</td></tr>
-        <tr><td>Key size</td><td>512 bits (64 bytes)</td><td>Session key, automaton state, epsilon</td></tr>
-        <tr><td>Tag size</td><td>256 bits (32 bytes)</td><td>Truncated integrity tag</td></tr>
+        <tr><td>Session key</td><td>512 bits (64 bytes)</td><td>$K_{\text{final}}$; also automaton state and $\varepsilon$</td></tr>
+        <tr><td>Confirmation key</td><td>512 bits (64 bytes)</td><td>$K_{\text{conf}}$, keys $\Sigma$</td></tr>
+        <tr><td>Tag size</td><td>256 bits (32 bytes)</td><td>Unkeyed corruption check $C$</td></tr>
         <tr><td>Rounds ($R$)</td><td>64</td><td>Chaotic automaton iterations</td></tr>
-        <tr><td>KEM backend</td><td>ML-KEM-1024</td><td>NIST FIPS 203, Level 5</td></tr>
+        <tr><td>PQ layer</td><td>ML-KEM-1024</td><td>NIST FIPS 203, Level 5 &mdash; pk 1568 B, sk 3168 B, ct 1568 B</td></tr>
+        <tr><td>Classic layer</td><td>X25519</td><td>RFC 7748 &mdash; pk, sk, shared secret 32 B</td></tr>
+        <tr><td>Hybrid keys</td><td>$PK = pk_{\text{M}} \| pk_{\text{X}}$</td><td>$SK = sk_{\text{M}} \| sk_{\text{X}}$ (plain concatenation)</td></tr>
       </tbody>
     </table>
   </div>
@@ -732,8 +737,9 @@ MathJax = {
     <div class="note">
       <strong>Determinism property:</strong>
       $E$ is a pure function. Given the same $(PK, \varepsilon)$, any party can independently
-      compute the same $S_{\text{final}}$. This is the foundation of the decapsulation
-      verification in &sect;4.
+      compute the same $S_{\text{final}}$. Its inputs are public, so <strong>$S_{\text{final}}$
+      is public too</strong>: $E$ binds the exchange to its context, it carries no secret
+      and adds no confidentiality.
     </div>
   </div>
 </div>
@@ -744,94 +750,85 @@ MathJax = {
   <h2>Encapsulation &mdash; $\text{Encapsulate}(PK_{\text{rec}})$</h2>
   <p>
     The sender generates a public artifact $\mathcal{A}$ and a secret session key
-    $K_{\text{final}}$ for the recipient holding public key $PK_{\text{rec}}$.
+    $K_{\text{final}}$ for the recipient holding $PK_{\text{rec}} = pk_{\text{M}} \| pk_{\text{X}}$.
   </p>
 
   <ol class="steps">
     <li>
-      <strong>Sample public seed</strong>
-      $$\varepsilon \;\xleftarrow{\$}\; \{0,1\}^{512}$$
+      <strong>Public context</strong>
+      $$\varepsilon \;\xleftarrow{\$}\; \{0,1\}^{512}, \qquad
+        S_{\text{final}} \;=\; E(PK_{\text{rec}},\; \varepsilon)$$
     </li>
     <li>
-      <strong>Compute chaotic state</strong>
-      $$S_{\text{final}} \;=\; E(PK_{\text{rec}},\; \varepsilon) \;\in\; \{0,1\}^{512}$$
-    </li>
-    <li>
-      <strong>KEM encapsulation (ML-KEM-1024)</strong>
+      <strong>Post-quantum layer (ML-KEM-1024)</strong>
       <div class="formula">
-        <div class="label">Post-quantum KEM</div>
-        $$
-        \bigl(C_{\text{kyber}},\; SS_{\text{kyber}}\bigr) \;=\; \text{KEM.Enc}(PK_{\text{rec}})
-        $$
+        <div class="label">Lattice KEM</div>
+        $$\bigl(C_{\text{kyber}},\; SS_{\text{M}}\bigr) \;=\; \text{ML-KEM.Enc}(pk_{\text{M}})$$
       </div>
-      <p style="margin-top:8px; font-size:15px;">
-        $C_{\text{kyber}}$ is the KEM ciphertext (variable length).
-        $SS_{\text{kyber}}$ is the shared secret.
-        When <code>pqcrypto</code> is unavailable, a deterministic HMAC-based stub provides
-        the same interface for testing purposes.
-      </p>
     </li>
     <li>
-      <strong>Session key derivation (HKDF fusion)</strong>
-      <p>The KEM shared secret and the chaotic state are fused into a single session key :</p>
+      <strong>Classical layer (X25519)</strong>
       <div class="formula">
-        <div class="label">Key material</div>
-        $$K_{\text{mat}} \;=\; SS_{\text{kyber}} \;\|\; S_{\text{final}}$$
+        <div class="label">Ephemeral Diffie-Hellman</div>
+        $$e \xleftarrow{\$} \mathbb{Z}, \qquad C_{\text{x}} \;=\; e \cdot G, \qquad SS_{\text{X}} \;=\; e \cdot pk_{\text{X}}$$
       </div>
+    </li>
+    <li>
+      <strong>Transcript</strong>
       <div class="formula">
-        <div class="label">Session key</div>
+        <div class="label">Every public value</div>
+        $$th \;=\; \mathcal{H}\!\bigl(PK_{\text{rec}} \,\|\, C_{\text{kyber}} \,\|\, C_{\text{x}} \,\|\, S_{\text{final}} \,\|\, \varepsilon\bigr)$$
+      </div>
+    </li>
+    <li>
+      <strong>Combiner</strong>
+      <div class="formula">
+        <div class="label">Session and confirmation keys</div>
         $$
         \boxed{\;
-          K_{\text{final}} \;=\; \text{HKDF}\!\bigl(
+          K_{\text{final}} \,\|\, K_{\text{conf}} \;=\; \text{HKDF}\!\bigl(
             \text{salt} = \mathcal{H}(PK_{\text{rec}}),\;
-            \text{ikm} = K_{\text{mat}},\;
-            \text{info} = \texttt{"aetherium-v1"},\;
-            \text{len} = 64
-          \bigr) \;\in\; \{0,1\}^{512}
+            \text{ikm} = SS_{\text{M}} \,\|\, SS_{\text{X}},\;
+            \text{info} = \texttt{"aetherium-v2"} \,\|\, th,\;
+            \text{len} = 128
+          \bigr)
         \;}
         $$
       </div>
       <p style="margin-top:8px; font-size:15px;">
-        The salt is $\mathcal{H}(PK_{\text{rec}})$, binding the key derivation to the recipient's identity.
-        The IKM concatenates both secrets, ensuring $K_{\text{final}}$ depends on both layers.
+        The IKM contains the two shared secrets only. They come from two independent
+        hardness assumptions, so the key stays secret if either one holds.
       </p>
     </li>
     <li>
-      <strong>Binding proof $\Sigma$</strong>
+      <strong>Key confirmation $\Sigma$ and corruption check $C$</strong>
       <div class="formula">
-        <div class="label">Binding proof</div>
-        $$\Sigma \;=\; \mathcal{H}\!\bigl(K_{\text{final}} \;\|\; S_{\text{final}} \;\|\; C_{\text{kyber}}\bigr) \;\in\; \{0,1\}^{512}$$
+        <div class="label">Keyed confirmation</div>
+        $$\Sigma \;=\; \text{HMAC}_{K_{\text{conf}}}\!\bigl(\texttt{"aetherium-v2-confirm"} \,\|\, th\bigr)$$
       </div>
-      <p style="margin-top:8px; font-size:15px;">
-        $\Sigma$ binds the session key to the artifact contents. Without $K_{\text{final}}$,
-        an attacker cannot forge a valid $\Sigma$.
-      </p>
-    </li>
-    <li>
-      <strong>Integrity tag $C$</strong>
       <div class="formula">
-        <div class="label">Truncated integrity tag</div>
-        $$C \;=\; \lfloor\, \mathcal{H}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \varepsilon\bigr) \,\rfloor_{32} \;\in\; \{0,1\}^{256}$$
+        <div class="label">Unkeyed check</div>
+        $$C \;=\; \lfloor\, \mathcal{H}\!\bigl(C_{\text{kyber}} \,\|\, C_{\text{x}} \,\|\, S_{\text{final}} \,\|\, \Sigma \,\|\, \varepsilon\bigr) \,\rfloor_{32}$$
       </div>
     </li>
   </ol>
 
   <div class="sub">
     <h3>Artifact Structure <span class="tag">def. 3.1</span></h3>
-    <p>The transmitted artifact is the tuple :</p>
     <div class="formula">
       <div class="label">Transport artifact</div>
-      $$\mathcal{A} \;=\; \bigl(\, C_{\text{kyber}},\; S_{\text{final}},\; \Sigma,\; C,\; \varepsilon \,\bigr)$$
+      $$\mathcal{A} \;=\; \bigl(\, C_{\text{kyber}},\; C_{\text{x}},\; S_{\text{final}},\; \Sigma,\; C,\; \varepsilon \,\bigr)$$
     </div>
 
     <table class="artifact-table">
       <thead><tr><th>Field</th><th>Size</th><th>Role</th></tr></thead>
       <tbody>
-        <tr><td>$C_{\text{kyber}}$</td><td>variable</td><td>Post-quantum KEM ciphertext</td></tr>
-        <tr><td>$S_{\text{final}}$</td><td>64 bytes</td><td>Automaton final state (public, verifiable)</td></tr>
-        <tr><td>$\Sigma$</td><td>64 bytes</td><td>Binding proof $\mathcal{H}(K \| S \| C_{\text{kyber}})$</td></tr>
-        <tr><td>$C$</td><td>32 bytes</td><td>Integrity tag (truncated SHA3-512)</td></tr>
-        <tr><td>$\varepsilon$</td><td>64 bytes</td><td>Public seed for automaton</td></tr>
+        <tr><td>$C_{\text{kyber}}$</td><td>1568 bytes</td><td>ML-KEM ciphertext</td></tr>
+        <tr><td>$C_{\text{x}}$</td><td>32 bytes</td><td>Ephemeral X25519 public key</td></tr>
+        <tr><td>$S_{\text{final}}$</td><td>64 bytes</td><td>Automaton final state (public)</td></tr>
+        <tr><td>$\Sigma$</td><td>64 bytes</td><td>Key confirmation, keyed by $K_{\text{conf}}$</td></tr>
+        <tr><td>$C$</td><td>32 bytes</td><td>Corruption check (unkeyed, not a MAC)</td></tr>
+        <tr><td>$\varepsilon$</td><td>64 bytes</td><td>Public seed</td></tr>
       </tbody>
     </table>
   </div>
@@ -842,80 +839,53 @@ MathJax = {
   <div class="section-num">&sect; 4</div>
   <h2>Decapsulation &mdash; $\text{Decapsulate}(SK_{\text{rec}}, PK_{\text{rec}}, \mathcal{A})$</h2>
   <p>
-    The recipient uses their secret key $SK_{\text{rec}}$ and public key $PK_{\text{rec}}$
-    to recover the session key $K_{\text{final}}$ from the artifact $\mathcal{A}$,
-    or reject with $\bot$ if any verification fails.
+    The recipient holds $SK_{\text{rec}} = sk_{\text{M}} \| sk_{\text{X}}$ and either recovers
+    $K_{\text{final}}$ or rejects with $\bot$.
     All comparisons use constant-time <code>hmac.compare_digest</code>.
   </p>
 
   <ol class="steps">
     <li>
-      <strong>Integrity verification</strong>
-      <div class="formula">
-        <div class="label">Recompute tag</div>
-        $$C' \;=\; \lfloor\, \mathcal{H}\!\bigl(C_{\text{kyber}} \;\|\; S_{\text{final}} \;\|\; \Sigma \;\|\; \varepsilon\bigr) \,\rfloor_{32}$$
-      </div>
+      <strong>Corruption check</strong>
       <div class="cases">
-        $$\text{If } C' \;\neq\; C \;\Longrightarrow\; \bot \quad \text{(artifact tampered or replayed)}$$
-      </div>
-    </li>
-    <li>
-      <strong>KEM decapsulation</strong>
-      <div class="formula">
-        <div class="label">Recover shared secret</div>
-        $$SS_{\text{kyber}} \;=\; \text{KEM.Dec}(SK_{\text{rec}},\; C_{\text{kyber}})$$
-      </div>
-      <div class="cases">
-        $$\text{If KEM.Dec fails} \;\Longrightarrow\; \bot \quad \text{(wrong SK or corrupted ciphertext)}$$
-      </div>
-    </li>
-    <li>
-      <strong>Automaton state verification</strong>
-      <p>
-        The recipient independently recomputes the automaton state from the public seed :
-      </p>
-      <div class="formula">
-        <div class="label">Recompute automaton</div>
-        $$S'_{\text{final}} \;=\; E(PK_{\text{rec}},\; \varepsilon)$$
-      </div>
-      <div class="cases">
-        $$\text{If } S'_{\text{final}} \;\neq\; S_{\text{final}} \;\Longrightarrow\; \bot \quad \text{(PK mismatch or corrupted artifact)}$$
-      </div>
-      <div class="note">
-        <strong>Correctness:</strong>
-        Since $E$ is a pure function, the recipient's $S'_{\text{final}}$ is identical
-        to the sender's $S_{\text{final}}$ when computed with the same $PK$ and $\varepsilon$.
-        This step detects any corruption of $S_{\text{final}}$ or $\varepsilon$ in transit,
-        and confirms that the artifact was built for this specific recipient.
-      </div>
-    </li>
-    <li>
-      <strong>Session key reconstruction</strong>
-      <div class="formula">
-        <div class="label">Key derivation</div>
-        $$
-        K'_{\text{final}} \;=\; \text{HKDF}\!\bigl(
-          \text{salt} = \mathcal{H}(PK_{\text{rec}}),\;
-          \text{ikm} = SS_{\text{kyber}} \;\|\; S'_{\text{final}},\;
-          \text{info} = \texttt{"aetherium-v1"},\;
-          \text{len} = 64
-        \bigr)
-        $$
-      </div>
-    </li>
-    <li>
-      <strong>Binding proof verification</strong>
-      <div class="formula">
-        <div class="label">Verify Sigma</div>
-        $$\Sigma' \;=\; \mathcal{H}\!\bigl(K'_{\text{final}} \;\|\; S'_{\text{final}} \;\|\; C_{\text{kyber}}\bigr)$$
-      </div>
-      <div class="cases">
-        $$\text{If } \Sigma' \;\neq\; \Sigma \;\Longrightarrow\; \bot \quad \text{(key-commitment attack detected)}$$
+        $$\text{If a field has the wrong length, or } C' \neq C \;\Longrightarrow\; \bot$$
       </div>
       <p style="margin-top:8px; font-size:15px;">
-        This final check ensures that the session key is consistent with the entire artifact.
-        An attacker who modifies $C_{\text{kyber}}$ after integrity passes (e.g. via tag collision)
-        would still fail this check because the binding proof includes $K_{\text{final}}$.
+        Anyone can recompute $C$, so this step only catches accidental corruption.
+        Protection against an attacker comes from step 5.
+      </p>
+    </li>
+    <li>
+      <strong>Both decapsulations</strong>
+      <div class="formula">
+        <div class="label">Recover shared secrets</div>
+        $$SS_{\text{M}} \;=\; \text{ML-KEM.Dec}(sk_{\text{M}},\; C_{\text{kyber}}), \qquad
+          SS_{\text{X}} \;=\; sk_{\text{X}} \cdot C_{\text{x}}$$
+      </div>
+      <p style="margin-top:8px; font-size:15px;">
+        ML-KEM uses implicit rejection: a modified ciphertext gives a pseudo-random
+        $SS_{\text{M}}$, not an error. An invalid X25519 point is rejected with $\bot$.
+      </p>
+    </li>
+    <li>
+      <strong>Context check</strong>
+      <div class="cases">
+        $$S' \;=\; E(PK_{\text{rec}},\; \varepsilon), \qquad \text{If } S' \neq S_{\text{final}} \;\Longrightarrow\; \bot$$
+      </div>
+    </li>
+    <li>
+      <strong>Key derivation</strong>
+      <p>$th$, $K_{\text{final}}$ and $K_{\text{conf}}$ are recomputed exactly as in &sect;3.</p>
+    </li>
+    <li>
+      <strong>Key confirmation</strong>
+      <div class="cases">
+        $$\Sigma' \;=\; \text{HMAC}_{K_{\text{conf}}}\!\bigl(\texttt{"aetherium-v2-confirm"} \,\|\, th\bigr), \qquad
+          \text{If } \Sigma' \neq \Sigma \;\Longrightarrow\; \bot$$
+      </div>
+      <p style="margin-top:8px; font-size:15px;">
+        Any change to a ciphertext, to $C_{\text{x}}$ or to the transcript changes $K_{\text{conf}}$
+        or $th$, so $\Sigma$ no longer matches.
       </p>
     </li>
   </ol>
@@ -928,8 +898,8 @@ MathJax = {
       \boxed{\;
         \text{Decapsulate}(SK_{\text{rec}}, PK_{\text{rec}}, \mathcal{A}) \;=\;
         \begin{cases}
-          K'_{\text{final}} \;\in\; \{0,1\}^{512}
-            & \text{if all 5 checks pass} \\[6pt]
+          K_{\text{final}} \;\in\; \{0,1\}^{512}
+            & \text{if all checks pass} \\[6pt]
           \bot
             & \text{otherwise}
         \end{cases}
@@ -945,53 +915,61 @@ MathJax = {
   <h2>Security Properties</h2>
 
   <div class="sub">
-    <h3>Hybrid Security Argument <span class="tag">prop. 5.1</span></h3>
+    <h3>Hybrid Confidentiality <span class="tag">prop. 5.1</span></h3>
     <p>
-      $K_{\text{final}}$ is computed as $\text{HKDF}(SS_{\text{kyber}} \| S_{\text{final}})$.
-      To recover $K_{\text{final}}$, an adversary must obtain <em>both</em> :
+      $K_{\text{final}}$ depends on $SS_{\text{M}}$ and $SS_{\text{X}}$. Every other input
+      ($PK$, $th$, $S_{\text{final}}$, $\varepsilon$) is public.
     </p>
     <div class="formula">
-      <div class="label">Attack requirements</div>
+      <div class="label">What an attacker must obtain</div>
       $$
       \begin{aligned}
-        &\text{(a)}\quad SS_{\text{kyber}} &&\text{requires breaking ML-KEM-1024 (NIST Level 5)} \\
-        &\text{(b)}\quad S_{\text{final}} &&\text{is public, but without } SS_{\text{kyber}} \text{, HKDF output is indistinguishable from random}
+        &\text{(a)}\quad SS_{\text{M}} &&\text{requires breaking ML-KEM-1024 (module lattices)} \\
+        &\text{(b)}\quad SS_{\text{X}} &&\text{requires solving Diffie-Hellman on Curve25519}
       \end{aligned}
       $$
     </div>
     <p>
-      If ML-KEM is IND-CCA2 secure and HKDF is a secure KDF, then knowledge of
-      $S_{\text{final}}$ alone provides no advantage in recovering $K_{\text{final}}$.
-      The chaotic automaton provides an additional security margin: even if the KEM
-      has a partial weakness, the attacker must also handle the HKDF fusion with the
-      automaton state.
+      Missing either one, and modelling HKDF as a random oracle, $K_{\text{final}}$ is
+      indistinguishable from random. A quantum attacker breaks (b) but not (a); a future
+      attack on lattices would break (a) but not (b).
+    </p>
+    <div class="note">
+      <strong>What the automaton does not do:</strong>
+      $S_{\text{final}}$ is computed from public values and is sent in the artifact.
+      It adds no secrecy. Its role is to bind the key to its context through $th$.
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3>Tamper Detection <span class="tag">prop. 5.2</span></h3>
+    <p>
+      $\Sigma$ is keyed by $K_{\text{conf}}$, which only the two legitimate parties know.
+      An attacker who modifies any field and recomputes $C$ still fails the $\Sigma$ check.
     </p>
   </div>
 
   <div class="sub">
-    <h3>Artifact Integrity <span class="tag">prop. 5.2</span></h3>
+    <h3>No Silent Downgrade <span class="tag">prop. 5.3</span></h3>
     <p>
-      The tag $C = \lfloor \mathcal{H}(C_{\text{kyber}} \| S_{\text{final}} \| \Sigma \| \varepsilon) \rfloor_{32}$
-      covers all artifact fields. Any modification to any field changes $C'$ with
-      overwhelming probability (collision resistance of SHA3-512).
-    </p>
-  </div>
-
-  <div class="sub">
-    <h3>Binding Proof <span class="tag">prop. 5.3</span></h3>
-    <p>
-      $\Sigma = \mathcal{H}(K_{\text{final}} \| S_{\text{final}} \| C_{\text{kyber}})$
-      binds the session key to the artifact. An attacker cannot produce a valid $\Sigma$
-      without knowing $K_{\text{final}}$, which requires the private key $SK_{\text{rec}}$.
-      This prevents key-commitment and key-substitution attacks.
+      The implementation refuses to run without ML-KEM-1024. The insecure test stub is loaded
+      only on explicit opt-in (<code>AETHERIUM_ALLOW_STUB=1</code>).
     </p>
   </div>
 
   <div class="sub">
     <h3>Timing Resistance <span class="tag">prop. 5.4</span></h3>
     <p>
-      All equality checks in decapsulation use <code>hmac.compare_digest</code> (constant-time),
-      preventing timing side-channel attacks on the tag, the automaton state, and the binding proof.
+      All equality checks use <code>hmac.compare_digest</code> (constant-time).
+    </p>
+  </div>
+
+  <div class="sub">
+    <h3>Limits <span class="tag">prop. 5.5</span></h3>
+    <p>
+      No sender authentication: anyone can encapsulate to a public key. Authenticity needs
+      a signature (e.g. ML-DSA) on top. These properties are arguments, not a formal proof,
+      and the scheme has not been audited.
     </p>
   </div>
 </div>

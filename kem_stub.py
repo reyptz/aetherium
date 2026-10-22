@@ -1,3 +1,9 @@
+"""INSECURE test double for the KEM interface.
+
+The mask below is derived from the PUBLIC key only, so anyone holding
+(pk, C) recovers k_seed and the shared secret. This module provides NO
+confidentiality. kem.py loads it only when AETHERIUM_ALLOW_STUB=1.
+"""
 import hashlib
 import os
 from typing import Tuple

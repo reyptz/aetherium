@@ -14,13 +14,13 @@ break succeeds.
 
 ## Summary
 
-| # | Finding | Severity | Config |
+| # | Finding (v1) | Severity | Status in v2 |
 |---|---------|----------|--------|
-| 1 | Total session-key recovery from public data | **Critical** | stub backend (default) |
-| 2 | Chaos layer provides zero confidentiality | **High** (design) | both backends |
-| 3 | KEM shared secret recoverable from `(pk, ct)` | **Critical** | stub backend |
-| 4 | Artifact forgery for an attacker-chosen key | **Critical** | stub backend |
-| 5 | Artifact tamper detection | — (holds) | both backends |
+| 1 | Total session-key recovery from public data | **Critical** | Fixed: fail-closed backend + X25519 layer |
+| 2 | Chaos layer provides zero confidentiality | **High** (design) | Fixed: X25519 is the second secret; `E` documented as public |
+| 3 | KEM shared secret recoverable from `(pk, ct)` | **Critical** | Fixed: stub only on explicit opt-in, real ML-KEM by default |
+| 4 | Outsider can encapsulate to `pk` | Reclassified: not a break | Documented as a limit (no sender authentication) |
+| 5 | Artifact tamper detection | — (holds) | Strengthened: keyed `Σ` replaces unkeyed binding |
 
 The default configuration ships the stub whenever `pqcrypto` is not installed
 (`kem.py` falls back silently). In that configuration the key offers **no
@@ -79,14 +79,19 @@ Same root cause as #1, isolated to the KEM: given `(pk, ct)`, the harness
 recovers the stub's shared secret directly. This is the primitive break that
 Findings 1 and 4 build on.
 
-## Finding 4 — Artifact forgery for a chosen key (Critical)
+## Finding 4 — Artifact forgery for a chosen key (reclassified)
 
 Because the attacker controls `k_seed` (stub), they can pick any `k_seed`,
 build a fully self-consistent artifact (valid tag `C`, valid binding proof `Σ`),
 and the honest recipient accepts it and derives a key the attacker already
 knows. The harness builds such an artifact and confirms the recipient's
-`K_final` equals the attacker's. This defeats key-commitment / authenticity for
-the stub configuration.
+`K_final` equals the attacker's.
+
+**Correction:** this is not specific to the stub. With a real ML-KEM backend,
+anyone can also call `encapsulate(pk)` and share a key with the recipient.
+That is how every KEM works. The real issue was the README's claim of
+protection against "key-substitution", which a KEM without a sender signature
+cannot provide. v2 documents this as a limit instead of claiming it.
 
 ## Finding 5 — Tamper detection holds (defense confirmed)
 
@@ -97,12 +102,36 @@ Flipping a byte of `C_kyber` while leaving the tag stale is correctly rejected
 
 ---
 
-## Bottom line
+## Bottom line (v1)
 
-The *protocol structure* (HKDF fusion, binding proof, constant-time checks,
-tamper tag) is sound. The breaks come from (a) the stub being a
-zero-confidentiality placeholder that the dispatcher installs silently, and
-(b) a design overclaim that the public chaos layer contributes secrecy. Fixing
-the dispatcher to fail closed and correcting the README claim removes the
-critical findings; real security then reduces exactly to ML-KEM-1024, as
-intended.
+The breaks came from (a) a zero-confidentiality stub that the dispatcher
+installed silently (regression introduced in commit `fbd0f42`; the first
+commit `ca459f5` was fail-closed), and (b) a design overclaim that the public
+chaos layer contributed secrecy.
+
+---
+
+## v2 — corrected logic
+
+| Change | Why |
+|--------|-----|
+| `kem.py` fails closed; stub only with `AETHERIUM_ALLOW_STUB=1` | No silent downgrade (findings 1, 3) |
+| `kem_kyber.py` supports `pqcrypto` 1.0 (`ml_kem_1024`) | The real backend was never loaded before |
+| Second layer is **X25519**, a real secret | Independent hardness assumption (finding 2) |
+| `K_final ‖ K_conf = HKDF(SS_mlkem ‖ SS_x25519, info = label ‖ th)` | Key needs both secrets, bound to the full transcript |
+| `Σ = HMAC(K_conf, th)` | Keyed confirmation; the old `Σ = H(K ‖ …)` published a hash of the key |
+| Length-prefixed encodings | Unambiguous transcript |
+| `E(pk, ε)` kept, documented as public context | Preserves the design, no false claim |
+
+Harness results on v2 (`python attacks/break_key.py`):
+
+| Attack | ML-KEM backend | Stub (opt-in) |
+|--------|----------------|---------------|
+| Public-only key recovery | resisted | resisted (X25519 holds) |
+| ML-KEM layer compromised | resisted | resisted |
+| X25519 layer compromised | resisted | **BROKEN** (both layers gone, expected) |
+| Tamper + recompute tag | resisted | resisted |
+| Mix-and-match sessions | resisted | resisted |
+| Silent downgrade to stub | resisted | resisted |
+
+Remaining limits: no sender authentication, no formal proof, no audit.
