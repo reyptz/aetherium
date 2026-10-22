@@ -1,13 +1,19 @@
 # Aetherium Ultra KEM
 
-**Hybrid Post-Quantum Key Encapsulation Mechanism**
+**Hybrid Post-Quantum Key Encapsulation Mechanism (v2)**
 
-Aetherium is a hybrid KEM that derives a session key from two independent cryptographic layers:
+Aetherium derives a 512-bit session key from two **independent hardness assumptions**:
 
-1. **ML-KEM (Kyber-1024)** — algebraic post-quantum hardness (NIST FIPS 203, Level 5)
-2. **Deterministic chaotic automaton E(PK, ε)** — SHA3-512-based state evolution over 64 rounds
+1. **ML-KEM-1024** — module lattices, post-quantum (NIST FIPS 203, Level 5)
+2. **X25519** — elliptic-curve Diffie-Hellman (RFC 7748), classical
 
-The two secrets are fused via HKDF-SHA3-512 into a single 512-bit session key. An attacker must break **both** layers to recover the key.
+Both shared secrets are fused with HKDF-SHA3-512 over the full transcript. The
+session key stays secret as long as **at least one** of the two layers is
+unbroken: a quantum computer that breaks X25519 still faces ML-KEM, and a
+future attack on ML-KEM still faces X25519.
+
+A deterministic chaotic automaton `E(PK, ε)` binds the exchange to its public
+context. It has **no secret input** and adds **no confidentiality**.
 
 ---
 
@@ -15,91 +21,103 @@ The two secrets are fused via HKDF-SHA3-512 into a single 512-bit session key. A
 
 ### Parameters
 
-| Parameter    | Value         | Description                            |
-|------------- |-------------- |----------------------------------------|
-| Hash         | SHA3-512      | All hash operations (H)               |
-| KDF          | HKDF-SHA3-512 | Key derivation function                |
-| Key size     | 512 bits      | Session key, automaton state, HKDF output |
-| Tag size     | 256 bits      | Integrity tag (truncated SHA3-512)     |
-| Rounds       | 64            | Chaotic automaton iterations           |
-| KEM backend  | ML-KEM-1024   | NIST FIPS 203, Level 5 (or stub)      |
+| Parameter    | Value              | Description                               |
+|------------- |------------------- |------------------------------------------ |
+| Hash         | SHA3-512           | All hash operations (H)                   |
+| KDF          | HKDF-SHA3-512      | Combiner                                  |
+| Session key  | 512 bits           | `K_final`                                 |
+| Confirmation | HMAC-SHA3-512      | `Σ`, keyed by `K_conf`                    |
+| Rounds       | 64                 | Automaton iterations                      |
+| PQ layer     | ML-KEM-1024        | pk 1568 B, sk 3168 B, ct 1568 B, ss 32 B  |
+| Classic layer| X25519             | pk 32 B, sk 32 B, ss 32 B                 |
 
-### Artifact Structure
+### Keys
 
-The public artifact `A = (C_kyber, S_final, Σ, C, ε)` is transmitted from sender to recipient:
+```
+pk = pk_mlkem ‖ pk_x25519        (1568 + 32 bytes)
+sk = sk_mlkem ‖ sk_x25519        (3168 + 32 bytes)
+```
 
-| Field     | Size (bytes) | Description                                        |
-|---------- |------------- |----------------------------------------------------|
-| `C_kyber` | variable     | KEM ciphertext                                     |
-| `S_final` | 64           | Automaton final state                              |
-| `Σ`       | 64           | Binding proof `H(K_final ‖ S_final ‖ C_kyber)`    |
-| `C`       | 32           | Integrity tag `H(C_kyber ‖ S_final ‖ Σ ‖ ε)[:32]` |
-| `ε`       | 64           | Public seed for automaton                          |
+### Artifact
+
+`A = (C_kyber, C_x25519, S_final, Σ, C, ε)`
+
+| Field      | Size (bytes) | Description                                          |
+|----------- |------------- |----------------------------------------------------- |
+| `C_kyber`  | 1568         | ML-KEM ciphertext                                    |
+| `C_x25519` | 32           | Ephemeral X25519 public key                          |
+| `S_final`  | 64           | Automaton final state (public)                       |
+| `Σ`        | 64           | Key confirmation `HMAC(K_conf, th)`                  |
+| `C`        | 32           | Corruption check `H(fields)[:32]` — unkeyed, not a MAC |
+| `ε`        | 64           | Public seed                                          |
+
+`‖` below denotes length-prefixed concatenation (4-byte big-endian length).
 
 ### Encapsulation
 
 ```
-Encapsulate(PK_rec) → (A, K_final)
+Encapsulate(PK) → (A, K_final)
 
-1. ε  ←$ {0,1}^512
-2. S_final = E(PK_rec, ε)
-3. (C_kyber, SS_kyber) = KEM.Enc(PK_rec)
-4. K_final = HKDF(SS_kyber ‖ S_final, salt=H(PK_rec), info="aetherium-v1")
-5. Σ = H(K_final ‖ S_final ‖ C_kyber)
-6. C = H(C_kyber ‖ S_final ‖ Σ ‖ ε)[:32]
-7. Return A = (C_kyber, S_final, Σ, C, ε), K_final
+1. ε ←$ {0,1}^512 ;  S_final = E(PK, ε)                     [public context]
+2. (C_kyber, SS_pq) = ML-KEM.Enc(pk_mlkem)
+3. e ←$ X25519 ;  C_x25519 = e·G ;  SS_x = e·pk_x25519
+4. th = H(PK ‖ C_kyber ‖ C_x25519 ‖ S_final ‖ ε)
+5. K_final ‖ K_conf = HKDF(ikm = SS_pq ‖ SS_x, salt = H(PK),
+                          info = "aetherium-v2" ‖ th, len = 128)
+6. Σ = HMAC-SHA3-512(K_conf, "aetherium-v2-confirm" ‖ th)
+7. C = H(C_kyber ‖ C_x25519 ‖ S_final ‖ Σ ‖ ε)[:32]
+8. Return A, K_final
 ```
 
 ### Decapsulation
 
 ```
-Decapsulate(SK_rec, PK_rec, A) → K_final | ⊥
+Decapsulate(SK, PK, A) → K_final | ⊥
 
-1. C' = H(C_kyber ‖ S_final ‖ Σ ‖ ε)[:32]
-   if C' ≠ C → ⊥                           [integrity]
-2. SS_kyber = KEM.Dec(SK_rec, C_kyber)
-   if ⊥ → ⊥                                [KEM failure]
-3. S' = E(PK_rec, ε)
-   if S' ≠ S_final → ⊥                     [automaton mismatch]
-4. K_final = HKDF(SS_kyber ‖ S', salt=H(PK_rec), info="aetherium-v1")
-5. Σ' = H(K_final ‖ S' ‖ C_kyber)
-   if Σ' ≠ Σ → ⊥                           [binding proof]
+1. Check field lengths and C                        else ⊥  [corruption]
+2. SS_pq = ML-KEM.Dec(sk_mlkem, C_kyber)                    [implicit rejection]
+   SS_x  = sk_x25519 · C_x25519                     else ⊥  [invalid point]
+3. S' = E(PK, ε) ;  S' = S_final ?                  else ⊥  [context mismatch]
+4. th, K_final, K_conf as in encapsulation
+5. Σ' = HMAC(K_conf, …th) ;  Σ' = Σ ?               else ⊥  [key confirmation]
 6. Return K_final
 ```
 
-All comparisons use constant-time digest comparison to resist timing side-channels.
+All comparisons use `hmac.compare_digest`.
 
 ### Chaotic Automaton E(PK, ε)
 
 ```
-E(PK, ε, rounds=64) → S_final ∈ {0,1}^512
-
-S_0 = H(ε ‖ PK)[:64]
-For r = 0 to rounds-1:
+S_0 = H(ε ‖ PK)
+For r = 0 to 63:
     η_r = H(ε ‖ PK ‖ ⟨r⟩₄)
     h_r = H(S_r ‖ PK ‖ η_r ‖ ⟨r⟩₄)
-    For i = 0 to 63:
-        if η_r[i mod 64] & 1 = 1:
-            S_{r+1}[i] = S_r[i] ⊕ h_r[i]
-        else:
-            S_{r+1}[i] = S_r[i]
-Return S_{rounds}
+    S_{r+1}[i] = S_r[i] ⊕ h_r[i]  if η_r[i] & 1  else S_r[i]
+Return S_64
 ```
 
-E is a **pure function**: same (PK, ε) always produces the same S_final. No external entropy is consumed during evolution.
+E is a pure function of public inputs: anyone can recompute `S_final`.
 
 ---
 
 ## Security Goals
 
-| Property                     | Mechanism                                          |
-|----------------------------- |----------------------------------------------------|
-| Post-quantum resilience      | ML-KEM-1024 (NIST Level 5)                        |
-| Layered defense              | K_final depends on both KEM secret and chaos state |
-| Artifact integrity           | Truncated SHA3-512 tag over all artifact fields    |
-| Key-commitment resistance    | Binding proof Σ = H(K ‖ S ‖ C_kyber)              |
-| Timing-attack resistance     | All comparisons via `hmac.compare_digest`          |
-| Deterministic reproducibility| E(PK, ε) is a pure function                       |
+| Property                  | Mechanism                                            |
+|-------------------------- |----------------------------------------------------- |
+| Post-quantum confidentiality | ML-KEM-1024                                       |
+| Hybrid robustness         | `K_final` needs **both** `SS_pq` and `SS_x`          |
+| Transcript binding        | `th` covers PK and every artifact field              |
+| Tamper detection          | Keyed confirmation `Σ` (the unkeyed `C` only catches accidental corruption) |
+| No silent downgrade       | `kem.py` refuses to run without ML-KEM               |
+| Timing                    | `hmac.compare_digest` for every comparison           |
+
+**Not provided:** sender authentication. Anyone can encapsulate to a public
+key; authenticity requires a signature (e.g. ML-DSA) on top.
+
+**Status:** reference implementation, no formal proof, no third-party audit.
+Do not use in production before an expert review.
+
+See [SECURITY_FINDINGS.md](SECURITY_FINDINGS.md) for the v1 breaks and how v2 fixes them.
 
 ---
 
@@ -110,9 +128,11 @@ aetherium/
 ├── aetherium.py       # Hybrid KEM: keygen, encapsulate, decapsulate
 ├── automaton.py        # Deterministic chaotic automaton E(PK, ε)
 ├── utils.py            # Cryptographic primitives (H512, HKDF, xor, compare)
-├── kem.py              # KEM dispatcher (Kyber or stub)
-├── kem_kyber.py        # ML-KEM-1024 wrapper (requires pqcrypto)
-├── kem_stub.py         # Deterministic HMAC-based stub for testing
+├── kem.py              # KEM dispatcher (ML-KEM, fail-closed)
+├── kem_kyber.py        # ML-KEM-1024 wrapper (pqcrypto)
+├── kem_stub.py         # INSECURE stub, tests only (AETHERIUM_ALLOW_STUB=1)
+├── attacks/
+│   └── break_key.py    # Adversarial break harness
 ├── tests/
 │   └── test_aetherium.py  # Correctness, rejection, and primitive tests
 ├── requirements.txt
@@ -127,15 +147,14 @@ aetherium/
 ### Install
 
 ```bash
-pip install pytest
-# Optional: pip install pqcrypto   # for real ML-KEM-1024
+pip install -r requirements.txt
 ```
 
-### Run tests
+### Run tests and the break harness
 
 ```bash
-cd aetherium
 python -m pytest tests/ -v
+python attacks/break_key.py
 ```
 
 ### API
@@ -159,21 +178,25 @@ assert K_sender == K_recipient  # 512-bit shared session key
 
 ## KEM Backend
 
-When `pqcrypto` is installed, Aetherium uses **Kyber-1024** (NIST FIPS 203, Level 5). Without it, a deterministic HMAC-SHA256 stub is used for development and testing. The stub is **not post-quantum** and must not be used in production.
+Aetherium requires **ML-KEM-1024** through `pqcrypto`. If it is missing,
+`kem.py` raises `ImportError` instead of falling back.
 
-The backend is selected automatically at import time via `kem.py`.
+`kem_stub.py` is an insecure test double: its ciphertext can be opened with
+the public key alone. It is loaded only when `AETHERIUM_ALLOW_STUB=1` is set,
+and emits a `RuntimeWarning`.
 
 ---
 
 ## Status
 
 - [x] Reference Python implementation
-- [x] Deterministic chaotic automaton (SHA3-512, 64 rounds)
-- [x] Hybrid KEM with HKDF fusion
-- [x] Artifact integrity and binding proofs
+- [x] Hybrid ML-KEM-1024 + X25519 with HKDF combiner
+- [x] Transcript binding and keyed key confirmation
+- [x] Fail-closed backend selection
 - [x] Constant-time comparisons
-- [x] Unit tests (correctness + rejection)
-- [ ] Real ML-KEM-1024 backend integration testing
+- [x] Unit tests on the real ML-KEM-1024 backend
+- [x] Adversarial break harness
+- [ ] Sender authentication (signature)
 - [ ] Formal security proof
 - [ ] Third-party audit
 

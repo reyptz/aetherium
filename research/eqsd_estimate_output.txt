@@ -1,0 +1,20 @@
+# Output of research/eqsd_estimate.py
+# lattice-estimator e4333d9bf9ef42fd8a29651b0c559fba7ce0d834, passagemath 10.8.13
+
+== EqSD-1408: rough (core-SVP) ==
+usvp                 :: rop: ≈2^278.3, red: ≈2^278.3, δ: 1.002119, β: 953, d: 2552, tag: usvp
+dual_hybrid          :: rop: ≈2^263.2, red: ≈2^262.5, guess: ≈2^261.9, β: 899, p: 3, ζ: 10, t: 140, β': 899, N: ≈2^186.1, m: 1408
+== EqSD-1408: full (default cost models) ==
+usvp                 :: rop: ≈2^297.9, red: ≈2^297.9, δ: 1.002119, β: 953, d: 2552, tag: usvp
+bdd                  :: rop: ≈2^294.2, red: ≈2^293.2, svp: ≈2^293.2, β: 936, η: 973, d: 2564, tag: bdd
+dual                 :: rop: ≈2^309.9, mem: ≈2^210.4, m: 1245, β: 992, d: 2653, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^283.3, red: ≈2^283.3, guess: ≈2^277.8, β: 897, p: 3, ζ: 10, t: 150, β': 876, N: ≈2^181.5, m: 1408
+
+== ML-KEM-1024: rough (core-SVP) ==
+usvp                 :: rop: ≈2^255.2, red: ≈2^255.2, δ: 1.002262, β: 874, d: 1867, tag: usvp
+dual_hybrid          :: rop: ≈2^241.8, red: ≈2^241.2, guess: ≈2^240.1, β: 826, p: 4, ζ: 0, t: 110, β': 826, N: ≈2^171.4, m: 1024
+== ML-KEM-1024: full (default cost models) ==
+usvp                 :: rop: ≈2^275.1, red: ≈2^275.1, δ: 1.002262, β: 874, d: 1867, tag: usvp
+bdd                  :: rop: ≈2^270.7, red: ≈2^269.8, svp: ≈2^269.6, β: 855, η: 889, d: 1867, tag: bdd
+dual                 :: rop: ≈2^288.5, mem: ≈2^195.3, m: 930, β: 918, d: 1954, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^262.3, red: ≈2^261.9, guess: ≈2^260.3, β: 823, p: 4, ζ: 0, t: 120, β': 804, N: ≈2^165.9, m: 1024

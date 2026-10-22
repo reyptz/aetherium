@@ -1,13 +1,11 @@
-# Aetherium Ultra KEM — Dependencies
-#
-# Core: stdlib only (hashlib, hmac, os, struct).
-# The KEM stub requires no external packages.
+# Aetherium Ultra KEM v2 — Dependencies
 
-# -- Post-Quantum KEM backend (optional) -------------------------------------
-# Uncomment ONE of the following to enable real ML-KEM (Kyber-1024).
-# Without these, Aetherium falls back to the deterministic HMAC-SHA256 stub.
+# -- Required -----------------------------------------------------------------
+pqcrypto>=1.0.0               # ML-KEM-1024 (FIPS 203, Level 5)
+cryptography>=42.0.0          # X25519 (RFC 7748)
 
-# pqcrypto>=0.1.3             # C-based Kyber-1024 (NIST Level 5)
+# Without pqcrypto, kem.py refuses to start. For tests only, the insecure
+# stub can be enabled with AETHERIUM_ALLOW_STUB=1.
 
 # -- Development & testing ----------------------------------------------------
 pytest>=7.4.0
