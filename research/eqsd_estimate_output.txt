@@ -1,0 +1,44 @@
+# Output of research/eqsd_estimate.py
+# lattice-estimator e4333d9bf9ef42fd8a29651b0c559fba7ce0d834, passagemath 10.8.13
+
+== Calibration ==
+ML-KEM-1024 (published core-SVP ~ 2^256):
+usvp                 :: rop: ≈2^255.2, red: ≈2^255.2, δ: 1.002262, β: 874, d: 1867, tag: usvp
+dual_hybrid          :: rop: ≈2^241.8, red: ≈2^241.2, guess: ≈2^240.1, β: 826, p: 4, ζ: 0, t: 110, β': 826, N: ≈2^171.4, m: 1024
+ML-DSA-87 MSIS strong unforgeability (published core-SVP ~ 2^252):
+lattice  :: rop: ≈2^253.5, red: ≈2^253.5, sieve: ≈2^-332.2, β: 868, η: 868, ζ: 1, d: 4095, prob: 1, ↻: 1, tag: infinity
+
+== EqSD collision: SIS, l_inf bound 2 ==
+-- SIS.estimate.rough (core-SVP):
+lattice  :: rop: ≈2^1130.9, red: ≈2^1130.9, sieve: ≈2^-332.2, β: 3873, η: ≈2^11.9, ζ: 1, d: 4483, prob: 1, ↻: 1, tag: infinity
+-- SIS.lattice, RC.ADPS16 (core-SVP):
+         rop: ≈2^1265.8
+         red: ≈2^1265.8
+       sieve: ≈2^-332.2
+           β:     4335
+           η: ≈2^12.1
+           ζ:        2
+           d:     4482
+        prob:        1
+           ↻:        1
+         tag: infinity
+-- SIS.lattice, default cost model:
+         rop: ≈2^1402.9
+         red: ≈2^1401.9
+       sieve: ≈2^1402.0
+           β:     4479
+           η: ≈2^12.1
+           ζ:        0
+           d:     4484
+        prob: ≈2^-114.2
+           ↻: ≈2^116.4
+         tag: infinity
+
+== Rank of an expanded block matrix (seeded, uniform over R_q) ==
+shape (644, 4484) rank 644
+
+== EqSD key recovery: LWE normal form ==
+LWEParameters(n=3840, q=28657, Xs=D(σ=0.82), Xe=D(σ=0.82), m=644, tag='EqSD-KR')
+rough: {'usvp': rop: ≈2^inf, tag: usvp, 'dual_hybrid': rop: ≈2^inf, red: ≈2^inf, guess: ≈2^14157145503517428.0, β: 643, p: 2, ζ: 0, t: 0, β': 643, N: ≈2^14157145503517418.0, m: ≈2^11.9}
+primal uSVP (ADPS16):          rop:  ≈2^inf
+         tag:     usvp

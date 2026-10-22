@@ -95,10 +95,27 @@ sorties », qui ne suffisait pas.
 Â₁⁻¹ y = x₁ + (Â₁⁻¹ Â₂) x₂
 ```
 
-EqSD-KR est donc **exactement** une instance LWE sous forme normale : secret
-`x₂` (3840 coordonnées ternaires), 644 échantillons, erreur `x₁` (ternaire).
-C'est une réécriture bijective de l'instance, pas une réduction entre problèmes
-généraux.
+En posant `b = Â₁⁻¹ y`, `A' = Â₁⁻¹ Â₂`, `s = x₂`, `e = x₁`, on obtient
+
+```
+b = A' s + e (mod q)        A' ∈ ℤ_q^(644 × 3840),  s ∈ {−1,0,1}^3840,  e ∈ {−1,0,1}^644
+```
+
+qui est la forme `b = As + e` de LWE, avec secret et erreur courts (« forme
+normale »). Si `A` est uniforme, `A'` est uniforme et indépendante de `Â₁`.
+Les deux formulations ont exactement les mêmes solutions : `x` est solution
+d'EqSD-KR si et seulement si `(s, e) = (x₂, x₁)` est solution de cette instance.
+C'est la même identité que la clé publique de ML-DSA, `t = A s₁ + s₂ = [A | I]·(s₁, s₂)`.
+
+Portée exacte : c'est une équivalence **entre ces deux instances**, pas une
+équivalence entre les problèmes SIS et LWE en général. L'instance obtenue est
+atypique : 644 échantillons pour un secret de dimension 3840 (sous-déterminée),
+régime peu étudié.
+
+**Fait 4 — Rang plein.** Si `A` est de rang `k` sur `𝔽_{q²}`, alors `Â` est de
+rang `2k = 644` sur `𝔽_q`, car le développement par blocs est la même
+application linéaire vue sur `𝔽_q`. Le réseau `Λ⊥(Â)` a donc pour déterminant
+`q^644`. Vérifié sur une instance tirée uniformément : rang 644.
 
 ## 6. Ce qui n'est pas démontré
 
@@ -114,7 +131,9 @@ généraux.
    n'ouvre pas une attaque plus efficace que sur SIS non structuré. Aucune
    attaque de ce type n'est connue en degré 2, mais c'est un constat, pas une
    preuve.
-4. **Hypothèse H1** sur la génération de `A`.
+4. **Hypothèse H1** sur la génération de `A`. C'est une hypothèse de
+   pseudo-aléa sur SHAKE256 dans ce rôle. Le fait qu'ML-DSA procède de même
+   (`ExpandA`) est un précédent, pas une garantie transférée à EqSD.
 
 **Correction d'une affirmation antérieure.** Il avait été écrit que la
 récupération de clé « équivaut à LWE ». C'était imprécis. Le résultat exact est
@@ -125,52 +144,76 @@ existent, mais sous des conditions qui n'ont pas été vérifiées ici.
 ## 7. Estimations reproductibles
 
 **Outil** : lattice estimator, commit `e4333d9bf9ef42fd8a29651b0c559fba7ce0d834`,
-sur SageMath 10.8.13 (passagemath). Mode `rough` : modèle core-SVP, coût
-ADPS16 `2^(0.292β)`. La structure de degré 2 est ignorée : les instances sont
-estimées comme SIS/LWE non structurés de dimensions développées.
+SageMath 10.8.13 (passagemath). Appels exacts : `research/eqsd_estimate.py`.
+Sortie complète : `research/eqsd_estimate_output.txt`.
 
-**Calibration** (même outil, même mode) :
+**Norme.** L'instance est déclarée avec `norm=oo, length_bound=2`. L'estimateur
+traite la norme `ℓ∞` directement, par une analyse probabiliste (MATZOV 2022 ;
+spécification de Dilithium, p. 35). Il n'y a pas de conversion vers une borne
+euclidienne.
 
-| Schéma | Publié | Obtenu |
-|---|---|---|
-| ML-KEM-1024 (LWE) | ≈ 2²⁵⁶ | β = 874, ≈ 2²⁵⁵·² |
-| ML-DSA-87 (MSIS) | ≈ 2²⁵² | β = 868, ≈ 2²⁵³·⁵ |
+**Structure.** L'estimateur modélise un réseau `Λ⊥(Â)` de dimension 4484 et de
+déterminant `q^644` (Fait 4). Il suppose que ce réseau se comporte comme un
+réseau aléatoire face à BKZ. C'est la même convention que pour les estimations
+publiées de ML-KEM et ML-DSA, qui ignorent aussi leur structure de module. Ce
+n'est pas une preuve pour la structure de degré 2 (§6.3).
 
-**EqSD :**
+**Calibration.** Avec le même outil, le mode `rough` donne environ 2²⁵⁵
+(β = 874) pour ML-KEM-1024 et environ 2²⁵³ (β = 868) pour ML-DSA-87, en accord
+avec les ordres de grandeur core-SVP publiés. Cela vérifie l'installation,
+**pas** la pertinence du modèle pour EqSD.
 
-| Instance | Paramètres | Résultat |
-|---|---|---|
-| Collision | SIS∞, n = 644, m = 4484, q = 28657, β = 2 | β_BKZ = 3873, ≈ 2¹¹³⁰·⁹ (classique, core-SVP) |
-| Récupération de clé | LWE forme normale, n = 3840, m = 644, secret et erreur ternaires | **hors modèle** : toutes les attaques renvoient `2^inf` |
+**Collision : sensibilité au modèle**
 
-**Lecture du résultat « hors modèle ».** `2^inf` ne signifie pas une sécurité
-infinie. Le vecteur cible `(x₂, x₁)` a une norme `≈ √(4484 · 2/3) ≈ 54,7`. Le
-plus court vecteur attendu du réseau d'attaque (dimension 4485, déterminant
-`q^644`) a une norme `≈ √(4485/(2πe)) · q^(644/4485) ≈ 70,7`. Le secret n'est
-donc pas assez court par rapport au réseau pour que l'attaque uSVP s'applique,
-et l'outil ne trouve aucune taille de bloc qui réussisse. **Aucun chiffre de
-sécurité n'est revendiqué pour EqSD-KR** tant qu'une attaque adaptée à ce régime
-n'a pas été modélisée.
+| Appel | Modèle de coût | β_BKZ | Coût |
+|---|---|---|---|
+| `SIS.estimate.rough` | core-SVP | 3873 | ≈ 2¹¹³¹ |
+| `SIS.lattice`, `RC.ADPS16` | core-SVP | 4335 | ≈ 2¹²⁶⁶ |
+| `SIS.lattice`, défaut | défaut de l'outil (MATZOV) | 4479 | ≈ 2¹⁴⁰³ |
 
-**Non modélisé :** attaques hybrides (réduction et recherche combinées),
-attaques combinatoires sur secrets ternaires, attaques algébriques, et toute
-attaque exploitant la structure de degré 2.
+Le chiffre varie de 2¹¹³¹ à 2¹⁴⁰³ selon le modèle. Les tailles de bloc sont
+proches de la dimension complète (4484), soit environ cinq fois au-delà de la
+zone où l'outil a été calibré (β ≈ 870). **Ce sont des extrapolations
+heuristiques, pas des niveaux de sécurité.** La seule lecture défendable : dans
+les modèles d'attaque par réduction de réseau de cet outil, la collision exige
+une réduction en dimension quasi complète.
+
+**Récupération de clé : sécurité inconnue**
+
+Pour l'instance du Fait 3, toutes les attaques modélisées renvoient `2^inf`.
+Cela signifie seulement que l'outil n'a pas trouvé de coût fini dans cette
+configuration. **Ce n'est pas un résultat positif de sécurité.**
+
+Les normes 54,7 (norme typique du secret ternaire) et 70,7 (heuristique
+gaussienne du réseau d'attaque) n'expliquent qu'une chose : pourquoi le
+modèle uSVP ne s'applique pas, puisque le secret n'est pas exceptionnellement
+court dans ce réseau. Elles ne mesurent le coût d'aucune attaque.
+
+À étudier avant toute affirmation : attaques combinatoires sur secrets
+ternaires (techniques de représentations), attaques hybrides (réduction et
+recherche), décodage par ensembles d'information, et exploitation de la
+distribution ternaire.
 
 Les estimations grossières faites auparavant (2⁸²³ pour la collision, 2¹¹⁹⁷
-pour la clé) sont **remplacées** par ce tableau.
+pour la clé) sont **retirées**.
 
 ## 8. Tailles
 
 | Objet | Taille |
 |---|---|
-| `y` (15 bits par coefficient) | 644 × 15 = 9660 bits = 1207,5 octets |
+| `y` (15 bits par coefficient) | 644 × 15 = 9660 bits, soit 1208 octets |
+| Graine de `A` | 32 octets |
+| **Clé publique** (`y` + graine) | **1240 octets** |
 | `x`, codage idéal (log₂ 3 bits par valeur) | ≈ 888,4 octets |
 | `x`, codage 2 bits par valeur | 1121 octets |
 
 ## 9. Points ouverts
 
 1. Énoncer le théorème de réduction applicable et vérifier ses hypothèses (§6.1).
-2. Modéliser une attaque adaptée à EqSD-KR dans ce régime (§7).
-3. Analyser la structure de degré 2 (§6.3).
-4. Seulement ensuite : construire une signature, dont les bornes plus larges
+2. Étudier les attaques sur EqSD-KR listées au §7 ; aucun niveau de sécurité
+   de la clé n'est connu.
+3. Rendre la collision robuste au modèle : paramètres dans la zone calibrée, ou
+   analyse au-delà.
+4. Analyser la structure de degré 2 (§6.3).
+5. Seulement ensuite : construire une signature, dont les bornes plus larges
    changeront fortement les estimations.
